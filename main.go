@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 // ── Styles ─────────────────────────────────────────────
 var (
@@ -61,6 +61,8 @@ var (
 	// Decorations
 	aliasStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#bd93f9"))
 	activeTag    = lipgloss.NewStyle().Foreground(lipgloss.Color("#50fa7b")).Render("●")
+	pinTag       = lipgloss.NewStyle().Foreground(lipgloss.Color("#f1fa8c")).Render("★")
+	pinItemStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#f1fa8c"))
 	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#555"))
 	successStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50fa7b"))
 	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff5555"))
@@ -75,10 +77,15 @@ var (
 	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#555"))
 )
 
-// ── Config (aliases) ───────────────────────────────────
+// ── Config (aliases + history + pins) ─────────────────
 type config struct {
-	Aliases map[string]string `json:"aliases"`
+	Aliases  map[string]string `json:"aliases"`
+	History  []string          `json:"history,omitempty"`
+	Previous string            `json:"previous,omitempty"`
+	Pins     []string          `json:"pins,omitempty"`
 }
+
+const maxHistory = 10
 
 func configPath() string {
 	home, _ := os.UserHomeDir()
@@ -104,6 +111,25 @@ func saveConfig(c config) error {
 		return err
 	}
 	return os.WriteFile(configPath(), data, 0644)
+}
+
+// recordHistory saves current context to history before switching
+func recordHistory(cfg *config, current, next string) {
+	if current == "" || current == next {
+		return
+	}
+	cfg.Previous = current
+	// Prepend current to history, avoid duplicates at head
+	newHistory := []string{current}
+	for _, h := range cfg.History {
+		if h != current {
+			newHistory = append(newHistory, h)
+		}
+	}
+	if len(newHistory) > maxHistory {
+		newHistory = newHistory[:maxHistory]
+	}
+	cfg.History = newHistory
 }
 
 // ── Fuzzy matching ─────────────────────────────────────
@@ -231,11 +257,48 @@ func initialModel(contexts []string, current string, cfg config) model {
 	return m
 }
 
-func (m *model) resetFilter() {
-	m.filtered = make([]int, len(m.contexts))
-	for i := range m.contexts {
-		m.filtered[i] = i
+// isPinned returns true if ctx is in the pins list
+func (m *model) isPinned(ctx string) bool {
+	for _, p := range m.cfg.Pins {
+		if p == ctx {
+			return true
+		}
 	}
+	return false
+}
+
+// sortedByPins returns indices with pinned contexts first (preserving pin order), then the rest
+func (m *model) sortedByPins(indices []int) []int {
+	pinSet := make(map[string]int, len(m.cfg.Pins))
+	for i, p := range m.cfg.Pins {
+		pinSet[p] = i
+	}
+	pinned := make([]int, 0, len(m.cfg.Pins))
+	rest := make([]int, 0, len(indices))
+	// collect pinned in pin order
+	for _, p := range m.cfg.Pins {
+		for _, idx := range indices {
+			if m.contexts[idx] == p {
+				pinned = append(pinned, idx)
+				break
+			}
+		}
+	}
+	// collect rest
+	for _, idx := range indices {
+		if _, ok := pinSet[m.contexts[idx]]; !ok {
+			rest = append(rest, idx)
+		}
+	}
+	return append(pinned, rest...)
+}
+
+func (m *model) resetFilter() {
+	indices := make([]int, len(m.contexts))
+	for i := range m.contexts {
+		indices[i] = i
+	}
+	m.filtered = m.sortedByPins(indices)
 	m.scrollOffset = 0
 }
 
@@ -271,10 +334,11 @@ func (m *model) applyFilter() {
 		return results[a].score > results[b].score
 	})
 
-	m.filtered = nil
+	indices := make([]int, 0, len(results))
 	for _, r := range results {
-		m.filtered = append(m.filtered, r.index)
+		indices = append(indices, r.index)
 	}
+	m.filtered = m.sortedByPins(indices)
 	if m.cursor >= len(m.filtered) {
 		m.cursor = max(0, len(m.filtered)-1)
 	}
@@ -352,6 +416,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyPgDown:
 			m.cursor = min(len(m.filtered)-1, m.cursor+10)
 			m.ensureVisible()
+		case tea.KeyCtrlP:
+			// Toggle pin/unpin on the current item
+			if len(m.filtered) > 0 {
+				ctx := m.contexts[m.filtered[m.cursor]]
+				if m.isPinned(ctx) {
+					newPins := make([]string, 0, len(m.cfg.Pins))
+					for _, p := range m.cfg.Pins {
+						if p != ctx {
+							newPins = append(newPins, p)
+						}
+					}
+					m.cfg.Pins = newPins
+				} else {
+					m.cfg.Pins = append(m.cfg.Pins, ctx)
+				}
+				_ = saveConfig(m.cfg)
+				savedCtx := ctx
+				m.resetFilter()
+				for i, idx := range m.filtered {
+					if m.contexts[idx] == savedCtx {
+						m.cursor = i
+						break
+					}
+				}
+				m.ensureVisible()
+			}
+		case tea.KeyCtrlT:
+			// Jump to first pinned context
+			for i, idx := range m.filtered {
+				if m.isPinned(m.contexts[idx]) {
+					m.cursor = i
+					m.ensureVisible()
+					break
+				}
+			}
 		case tea.KeyEnter:
 			if len(m.filtered) > 0 {
 				m.chosen = m.contexts[m.filtered[m.cursor]]
@@ -367,6 +466,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applyFilter()
 			m.cursor = 0
 			m.scrollOffset = 0
+			// Note: KeyCtrlP and KeyCtrlT are handled above, not here
 		}
 	}
 	return m, nil
@@ -425,11 +525,15 @@ func (m model) View() string {
 		pointer := "   "
 		var name string
 
+		isPinned := m.isPinned(ctx)
+
 		if i == m.cursor {
 			pointer = " ❯ "
 			name = selectedItemStyle.Render(ctx)
 		} else if isActive {
 			name = activeItemStyle.Render(ctx)
+		} else if isPinned {
+			name = pinItemStyle.Render(ctx)
 		} else {
 			name = normalItemStyle.Render(ctx)
 		}
@@ -437,6 +541,9 @@ func (m model) View() string {
 		extras := ""
 		if alias != "" {
 			extras += " " + aliasStyle.Render("@"+alias)
+		}
+		if isPinned {
+			extras += " " + pinTag
 		}
 		if isActive {
 			extras += " " + activeTag
@@ -453,7 +560,7 @@ func (m model) View() string {
 	// ── Footer ──
 	b.WriteString("\n")
 	b.WriteString("  " + counterStyle.Render(fmt.Sprintf("  %d/%d", len(m.filtered), len(m.contexts))) +
-		helpStyle.Render("  ↑↓ navigate · enter select · esc clear · ctrl+c quit") + "\n")
+		helpStyle.Render("  ↑↓ navigate · enter select · ctrl+p pin/unpin · ctrl+t jump-pin · esc clear · ctrl+c quit") + "\n")
 
 	return b.String()
 }
@@ -472,15 +579,24 @@ func main() {
 			fmt.Printf(`ksw v%s - Interactive Kubernetes context switcher
 
 Usage:
-  ksw                  Launch interactive selector (fuzzy search)
-  ksw <name>           Switch directly to context <name>
-  ksw @<alias>         Switch using an alias
-  ksw alias <name> <context>  Create alias for a context
-  ksw alias rm <name>         Remove an alias
-  ksw alias ls                List all aliases
-  ksw -l               List contexts (non-interactive)
-  ksw -h               Show this help
-  ksw -v               Show version
+  ksw                        Launch interactive selector (fuzzy search)
+  ksw <name>                 Switch directly to context <name> (short name ok)
+  ksw -                      Switch to previous context
+  ksw @<alias>               Switch using an alias
+  ksw history                Show recent context history
+  ksw pin <name>             Pin a context to the top of the list
+  ksw pin rm <name>          Unpin a context
+  ksw pin ls                 List pinned contexts
+  ksw rename <old> <new>     Rename a context in kubeconfig
+  ksw alias <name> <context> Create alias for a context
+  ksw alias rm <name>        Remove an alias
+  ksw alias ls               List all aliases
+  ksw completion install     Auto-install completion in ~/.zshrc or ~/.bashrc
+  ksw completion zsh         Print zsh setup line
+  ksw completion bash        Print bash setup line
+  ksw -l                     List contexts (non-interactive)
+  ksw -h                     Show this help
+  ksw -v                     Show version
 
 Navigation:
   Type                Filter contexts with fuzzy search
@@ -492,7 +608,7 @@ Navigation:
   Esc                 Clear filter / Quit
   Ctrl+C              Quit
 
-Aliases are stored in ~/.ksw.json
+Config stored in ~/.ksw.json
 `, version)
 			return
 
@@ -518,6 +634,68 @@ Aliases are stored in ~/.ksw.json
 					fmt.Printf("  %s%s\n", ctx, alias)
 				}
 			}
+			return
+
+		case "-":
+			// Switch to previous context
+			if cfg.Previous == "" {
+				fmt.Fprintf(os.Stderr, "%s No previous context recorded.\n", warnStyle.Render("✗"))
+				os.Exit(1)
+			}
+			current := getCurrentContext()
+			prev := cfg.Previous
+			recordHistory(&cfg, current, prev)
+			if err := switchContext(prev); err != nil {
+				fmt.Fprintf(os.Stderr, "%s Context '%s' not found.\n", warnStyle.Render("✗"), prev)
+				os.Exit(1)
+			}
+			if err := saveConfig(cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("%s Switched to %s\n", successStyle.Render("✔"), prev)
+			return
+
+		case "history":
+			if len(cfg.History) == 0 {
+				fmt.Println(dimStyle.Render("No history yet."))
+				return
+			}
+			current := getCurrentContext()
+			reverseAlias := make(map[string]string)
+			for alias, ctx := range cfg.Aliases {
+				reverseAlias[ctx] = alias
+			}
+			fmt.Println(dimStyle.Render("  Recent contexts:"))
+			for i, ctx := range cfg.History {
+				marker := "  "
+				name := normalItemStyle.Render(ctx)
+				if ctx == current {
+					marker = "  "
+					name = activeItemStyle.Render(ctx)
+				}
+				alias := ""
+				if a, ok := reverseAlias[ctx]; ok {
+					alias = " " + aliasStyle.Render("@"+a)
+				}
+				active := ""
+				if ctx == current {
+					active = " " + activeTag
+				}
+				fmt.Printf("%s%d  %s%s%s\n", marker, i+1, name, alias, active)
+			}
+			return
+
+		case "rename":
+			handleRename(cfg)
+			return
+
+		case "completion":
+			handleCompletion()
+			return
+
+		case "pin":
+			handlePin(cfg)
 			return
 
 		case "alias":
@@ -565,12 +743,16 @@ Aliases are stored in ~/.ksw.json
 						os.Exit(1)
 					}
 				}
+				current := getCurrentContext()
+				recordHistory(&cfg, current, target)
+				_ = saveConfig(cfg)
 				fmt.Printf("%s Switched to %s %s\n", successStyle.Render("✔"), target, aliasStyle.Render("@"+aliasName))
 				return
 			}
 
 			if arg[0] != '-' {
 				// Try exact match first, then suffix/substring match
+				current := getCurrentContext()
 				target := arg
 				if err := switchContext(target); err != nil {
 					// Exact match failed, try to find by suffix or substring
@@ -602,6 +784,8 @@ Aliases are stored in ~/.ksw.json
 						os.Exit(1)
 					}
 				}
+				recordHistory(&cfg, current, target)
+				_ = saveConfig(cfg)
 				fmt.Printf("%s Switched to %s\n", successStyle.Render("✔"), target)
 				return
 			}
@@ -633,10 +817,12 @@ Aliases are stored in ~/.ksw.json
 
 	final := result.(model)
 	if final.chosen != "" && final.chosen != current {
+		recordHistory(&cfg, current, final.chosen)
 		if err := switchContext(final.chosen); err != nil {
 			fmt.Fprintf(os.Stderr, "Error switching to %s: %v\n", final.chosen, err)
 			os.Exit(1)
 		}
+		_ = saveConfig(cfg)
 		alias := final.aliasFor(final.chosen)
 		extra := ""
 		if alias != "" {
@@ -645,6 +831,376 @@ Aliases are stored in ~/.ksw.json
 		fmt.Printf("%s Switched to %s%s\n", successStyle.Render("✔"), final.chosen, extra)
 	} else if final.chosen == current {
 		fmt.Printf("%s Already on %s\n", dimStyle.Render("·"), current)
+	}
+}
+
+// ── handleRename ───────────────────────────────────────
+func handleRename(cfg config) {
+	if len(os.Args) < 4 {
+		fmt.Fprintln(os.Stderr, "Usage: ksw rename <old-name> <new-name>")
+		os.Exit(1)
+	}
+	oldName := os.Args[2]
+	newName := os.Args[3]
+
+	// Get all contexts to find the full name if short name given
+	contexts, err := getContexts()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	// Resolve old name (exact or suffix/substring)
+	resolvedOld := oldName
+	if err := switchContext(oldName); err != nil {
+		// Not exact, try substring
+		var matches []string
+		for _, ctx := range contexts {
+			if strings.HasSuffix(ctx, "/"+oldName) || strings.Contains(ctx, oldName) {
+				matches = append(matches, ctx)
+			}
+		}
+		if len(matches) == 1 {
+			resolvedOld = matches[0]
+		} else if len(matches) > 1 {
+			fmt.Fprintf(os.Stderr, "%s Ambiguous name '%s', matches:\n", warnStyle.Render("✗"), oldName)
+			for _, m := range matches {
+				fmt.Fprintf(os.Stderr, "  %s\n", m)
+			}
+			os.Exit(1)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s Context '%s' not found.\n", warnStyle.Render("✗"), oldName)
+			os.Exit(1)
+		}
+	}
+	// Switch back to current after the test switch above
+	if cur := getCurrentContext(); cur != resolvedOld {
+		_ = switchContext(cur)
+	}
+
+	cmd := exec.Command("kubectl", "config", "rename-context", resolvedOld, newName)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s Failed to rename: %s\n", warnStyle.Render("✗"), strings.TrimSpace(string(out)))
+		os.Exit(1)
+	}
+
+	// Update aliases that pointed to old name
+	updated := 0
+	for alias, target := range cfg.Aliases {
+		if target == resolvedOld {
+			cfg.Aliases[alias] = newName
+			updated++
+		}
+	}
+	// Update history
+	for i, h := range cfg.History {
+		if h == resolvedOld {
+			cfg.History[i] = newName
+		}
+	}
+	if cfg.Previous == resolvedOld {
+		cfg.Previous = newName
+	}
+	if err := saveConfig(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("%s Renamed %s → %s\n", successStyle.Render("✔"),
+		dimStyle.Render(resolvedOld), currentValueStyle.Render(newName))
+	if updated > 0 {
+		fmt.Printf("  %s Updated %d alias(es)\n", dimStyle.Render("·"), updated)
+	}
+}
+
+// ── handleCompletion ───────────────────────────────────
+func handleCompletion() {
+	shell := "zsh"
+	if len(os.Args) >= 3 {
+		shell = os.Args[2]
+	}
+
+	// If --script flag passed, print the actual completion script (used by source <(...))
+	if len(os.Args) >= 4 && os.Args[3] == "--script" {
+		printCompletionScript(shell)
+		return
+	}
+
+	// "install" subcommand: auto-install into shell rc file
+	if shell == "install" {
+		installCompletion()
+		return
+	}
+
+	// Otherwise just print the line to add to shell config
+	switch shell {
+	case "zsh":
+		fmt.Println("# Add this line to your ~/.zshrc:")
+		fmt.Println("source <(ksw completion zsh --script)")
+	case "bash":
+		fmt.Println("# Add this line to your ~/.bashrc:")
+		fmt.Println("source <(ksw completion bash --script)")
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown shell '%s'. Supported: zsh, bash, install\n", shell)
+		os.Exit(1)
+	}
+}
+
+func installCompletion() {
+	// Detect shell from $SHELL env var
+	shellBin := os.Getenv("SHELL")
+	var rcFile, shellName string
+	switch {
+	case strings.HasSuffix(shellBin, "zsh"):
+		shellName = "zsh"
+		home, _ := os.UserHomeDir()
+		rcFile = filepath.Join(home, ".zshrc")
+	case strings.HasSuffix(shellBin, "bash"):
+		shellName = "bash"
+		home, _ := os.UserHomeDir()
+		rcFile = filepath.Join(home, ".bashrc")
+	default:
+		fmt.Fprintf(os.Stderr, "%s Could not detect shell (SHELL=%s). Run manually:\n", warnStyle.Render("✗"), shellBin)
+		fmt.Fprintf(os.Stderr, "  ksw completion zsh   # for zsh\n")
+		fmt.Fprintf(os.Stderr, "  ksw completion bash  # for bash\n")
+		os.Exit(1)
+	}
+
+	line := fmt.Sprintf("source <(ksw completion %s --script)", shellName)
+	marker := "# ksw completion"
+
+	// Read existing rc file
+	data, err := os.ReadFile(rcFile)
+	if err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "%s Could not read %s: %v\n", warnStyle.Render("✗"), rcFile, err)
+		os.Exit(1)
+	}
+
+	// Check if already installed (idempotent)
+	if strings.Contains(string(data), line) {
+		fmt.Printf("%s Completion already installed in %s\n", dimStyle.Render("·"), rcFile)
+		fmt.Printf("  Run: %s\n", searchActiveStyle.Render("source "+rcFile))
+		return
+	}
+
+	// Append to rc file
+	f, err := os.OpenFile(rcFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s Could not write to %s: %v\n", warnStyle.Render("✗"), rcFile, err)
+		os.Exit(1)
+	}
+	defer f.Close()
+
+	_, err = fmt.Fprintf(f, "\n%s\n%s\n", marker, line)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s Could not write completion: %v\n", warnStyle.Render("✗"), err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("%s Installed %s completion in %s\n", successStyle.Render("✔"), shellName, currentValueStyle.Render(rcFile))
+	fmt.Printf("  Run: %s\n", searchActiveStyle.Render("source "+rcFile))
+}
+
+func printCompletionScript(shell string) {
+	switch shell {
+	case "zsh":
+		fmt.Print(`_ksw_contexts() {
+  local contexts
+  contexts=($(kubectl config get-contexts -o name 2>/dev/null))
+  _describe 'contexts' contexts
+}
+
+_ksw_aliases() {
+  local aliases
+  aliases=($(ksw alias ls 2>/dev/null | awk '{print $1}' | tr -d '@'))
+  _describe 'aliases' aliases
+}
+
+_ksw() {
+  local state
+  _arguments \
+    '1: :->cmd' \
+    '*: :->args' && return
+
+  case $state in
+    cmd)
+      local cmds
+      cmds=(
+        'history:Show recent context history'
+        'alias:Manage aliases'
+        'rename:Rename a context'
+        'completion:Print shell completion setup'
+        '-:Switch to previous context'
+        '-l:List contexts'
+        '-v:Show version'
+        '-h:Show help'
+      )
+      _describe 'commands' cmds
+      _ksw_contexts
+      ;;
+    args)
+      case $words[2] in
+        alias)
+          if [[ ${#words[@]} -eq 3 ]]; then
+            local sub=(ls rm)
+            _describe 'subcommands' sub
+            _ksw_aliases
+          elif [[ ${#words[@]} -eq 4 && $words[3] == rm ]]; then
+            _ksw_aliases
+          fi
+          ;;
+        rename)
+          _ksw_contexts ;;
+      esac
+      ;;
+  esac
+}
+
+compdef _ksw ksw
+`)
+	case "bash":
+		fmt.Print(`_ksw_complete() {
+  local cur prev
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+  local contexts
+  contexts=$(kubectl config get-contexts -o name 2>/dev/null | tr '\n' ' ')
+
+  local aliases
+  aliases=$(ksw alias ls 2>/dev/null | awk '{print $1}' | tr -d '@' | tr '\n' ' ')
+
+  if [[ $COMP_CWORD -eq 1 ]]; then
+    local cmds="history alias rename completion - -l -v -h"
+    COMPREPLY=( $(compgen -W "$cmds $contexts" -- "$cur") )
+    return
+  fi
+
+  case "$prev" in
+    alias)  COMPREPLY=( $(compgen -W "ls rm $aliases" -- "$cur") ) ;;
+    rm)     COMPREPLY=( $(compgen -W "$aliases" -- "$cur") ) ;;
+    rename) COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
+    *)      COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
+  esac
+}
+
+complete -F _ksw_complete ksw
+`)
+	}
+}
+
+// ── handlePin ──────────────────────────────────────────
+func handlePin(cfg config) {
+	if len(os.Args) < 3 {
+		// No subcommand: list pins
+		if len(cfg.Pins) == 0 {
+			fmt.Println(dimStyle.Render("No pinned contexts. Use: ksw pin <name>"))
+			return
+		}
+		for _, p := range cfg.Pins {
+			fmt.Printf("  %s %s\n", pinTag, pinItemStyle.Render(p))
+		}
+		return
+	}
+
+	sub := os.Args[2]
+
+	switch sub {
+	case "ls", "list":
+		if len(cfg.Pins) == 0 {
+			fmt.Println(dimStyle.Render("No pinned contexts. Use: ksw pin <name>"))
+			return
+		}
+		for _, p := range cfg.Pins {
+			fmt.Printf("  %s %s\n", pinTag, pinItemStyle.Render(p))
+		}
+
+	case "rm", "remove", "unpin":
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "Usage: ksw pin rm <name>")
+			os.Exit(1)
+		}
+		name := os.Args[3]
+		// Resolve short name
+		resolved := name
+		for _, p := range cfg.Pins {
+			if strings.HasSuffix(p, "/"+name) || strings.Contains(p, name) {
+				resolved = p
+				break
+			}
+		}
+		found := false
+		newPins := cfg.Pins[:0]
+		for _, p := range cfg.Pins {
+			if p == resolved {
+				found = true
+			} else {
+				newPins = append(newPins, p)
+			}
+		}
+		if !found {
+			fmt.Fprintf(os.Stderr, "%s '%s' is not pinned.\n", warnStyle.Render("✗"), name)
+			os.Exit(1)
+		}
+		cfg.Pins = newPins
+		if err := saveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("%s Unpinned %s\n", successStyle.Render("✔"), resolved)
+
+	default:
+		// ksw pin <name> — add pin
+		name := sub
+		// Resolve full context name (exact or suffix/substring)
+		contexts, err := getContexts()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		resolved := name
+		// Check exact match first
+		exactFound := false
+		for _, ctx := range contexts {
+			if ctx == name {
+				exactFound = true
+				break
+			}
+		}
+		if !exactFound {
+			var matches []string
+			for _, ctx := range contexts {
+				if strings.HasSuffix(ctx, "/"+name) || strings.Contains(ctx, name) {
+					matches = append(matches, ctx)
+				}
+			}
+			if len(matches) == 1 {
+				resolved = matches[0]
+			} else if len(matches) > 1 {
+				fmt.Fprintf(os.Stderr, "%s Ambiguous '%s', matches:\n", warnStyle.Render("✗"), name)
+				for _, m := range matches {
+					fmt.Fprintf(os.Stderr, "  %s\n", m)
+				}
+				os.Exit(1)
+			} else {
+				fmt.Fprintf(os.Stderr, "%s Context '%s' not found.\n", warnStyle.Render("✗"), name)
+				os.Exit(1)
+			}
+		}
+		// Check already pinned
+		for _, p := range cfg.Pins {
+			if p == resolved {
+				fmt.Printf("%s Already pinned: %s\n", dimStyle.Render("·"), resolved)
+				return
+			}
+		}
+		cfg.Pins = append(cfg.Pins, resolved)
+		if err := saveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("%s Pinned %s %s\n", successStyle.Render("✔"), pinTag, pinItemStyle.Render(resolved))
 	}
 }
 
