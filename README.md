@@ -4,15 +4,43 @@ Interactive Kubernetes context switcher for your terminal. Built in Go.
 
 Navigate with arrow keys, fuzzy search by typing, pin your favorites, and switch contexts in milliseconds. Single binary, no runtime dependencies.
 
-> Named `ksw` to avoid conflict with macOS built-in `kswitch` (Kerberos).
+> Available for **macOS** and **Linux** (amd64 & arm64). Named `ksw` to avoid conflict with macOS built-in `kswitch` (Kerberos).
 
 ## Install
 
-### Homebrew (recommended)
+### Homebrew (macOS & Linux — recommended)
 
 ```bash
 brew tap YonierGomez/kswitch
 brew install kswitch
+```
+
+### Manual — Linux
+
+```bash
+# amd64 (x86_64)
+curl -sL https://github.com/YonierGomez/kswitch/releases/latest/download/ksw-linux-amd64.tar.gz | tar xz
+chmod +x ksw-linux-amd64
+sudo mv ksw-linux-amd64 /usr/local/bin/ksw
+
+# arm64 (AWS Graviton, Raspberry Pi, etc.)
+curl -sL https://github.com/YonierGomez/kswitch/releases/latest/download/ksw-linux-arm64.tar.gz | tar xz
+chmod +x ksw-linux-arm64
+sudo mv ksw-linux-arm64 /usr/local/bin/ksw
+```
+
+### Manual — macOS
+
+```bash
+# Apple Silicon (M1/M2/M3)
+curl -sL https://github.com/YonierGomez/kswitch/releases/latest/download/ksw-darwin-arm64.tar.gz | tar xz
+chmod +x ksw-darwin-arm64
+sudo mv ksw-darwin-arm64 /usr/local/bin/ksw
+
+# Intel
+curl -sL https://github.com/YonierGomez/kswitch/releases/latest/download/ksw-darwin-amd64.tar.gz | tar xz
+chmod +x ksw-darwin-amd64
+sudo mv ksw-darwin-amd64 /usr/local/bin/ksw
 ```
 
 ### From source
@@ -20,10 +48,6 @@ brew install kswitch
 ```bash
 go install github.com/YonierGomez/kswitch@latest
 ```
-
-### Manual
-
-Download the binary from [Releases](https://github.com/YonierGomez/kswitch/releases) and place it in your PATH.
 
 ## Usage
 
