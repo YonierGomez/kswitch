@@ -8,7 +8,15 @@ Navigate with arrow keys, fuzzy search by typing, pin your favorites, and switch
 
 ## Install
 
-### Homebrew (macOS & Linux — recommended)
+### One-line installer (macOS & Linux — easiest)
+
+```bash
+curl -sL https://raw.githubusercontent.com/YonierGomez/kswitch/main/install.sh | bash
+```
+
+Automatically detects your OS and architecture (amd64/arm64) and installs to `/usr/local/bin`.
+
+### Homebrew (macOS & Linux)
 
 ```bash
 brew tap YonierGomez/kswitch
