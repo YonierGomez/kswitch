@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ksw – Kubernetes Context Switcher</title>
+  <meta name="description" content="ksw is a blazing-fast interactive Kubernetes context switcher with fuzzy search, aliases and short-name switching." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0d1a;
+      --bg2:       #12122a;
+      --bg3:       #1a1a2e;
+      --border:    #2a2a4a;
+      --cyan:      #00d4ff;
+      --green:     #50fa7b;
+      --purple:    #bd93f9;
+      --yellow:    #f1fa8c;
+      --red:       #ff5555;
+      --gray:      #888;
+      --light:     #ccc;
+      --white:     #f8f8f2;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'Inter', sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(13,13,26,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+    .nav-logo span { color: var(--white); }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a {
+      color: var(--gray);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color .2s;
+    }
+    .nav-links a:hover { color: var(--white); }
+    .nav-cta {
+      background: var(--cyan);
+      color: var(--bg);
+      padding: .45rem 1.1rem;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-decoration: none;
+      transition: opacity .2s;
+    }
+    .nav-cta:hover { opacity: .85; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 700px; height: 700px;
+      background: radial-gradient(circle, rgba(0,212,255,.12) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: rgba(0,212,255,.1);
+      border: 1px solid rgba(0,212,255,.3);
+      color: var(--cyan);
+      padding: .3rem .9rem;
+      border-radius: 999px;
+      font-size: .8rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 1.2rem;
+      letter-spacing: -1px;
+    }
+    .hero h1 .accent { color: var(--cyan); }
+    .hero p {
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      color: var(--light);
+      max-width: 560px;
+      margin: 0 auto 2.5rem;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 3.5rem;
+    }
+    .btn-primary {
+      background: var(--cyan);
+      color: var(--bg);
+      padding: .75rem 1.8rem;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 1rem;
+      text-decoration: none;
+      transition: opacity .2s, transform .2s;
+    }
+    .btn-primary:hover { opacity: .85; transform: translateY(-2px); }
+    .btn-secondary {
+      background: transparent;
+      color: var(--white);
+      padding: .75rem 1.8rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      transition: border-color .2s, transform .2s;
+    }
+    .btn-secondary:hover { border-color: var(--cyan); transform: translateY(-2px); }
+
+    /* ── TERMINAL DEMO ── */
+    .terminal {
+      width: 100%;
+      max-width: 680px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
+      text-align: left;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+    }
+    .terminal-bar {
+      background: var(--bg2);
+      padding: .7rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red   { background: #ff5f57; }
+    .dot-yellow{ background: #febc2e; }
+    .dot-green { background: #28c840; }
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      color: var(--gray);
+      font-size: .75rem;
+    }
+    .terminal-body { padding: 1.2rem 1.4rem; line-height: 1.9; }
+    .t-dim    { color: #555; }
+    .t-current{ color: var(--gray); }
+    .t-val    { color: var(--green); font-weight: 700; }
+    .t-search { color: var(--yellow); font-weight: 700; }
+    .t-cursor { color: var(--cyan); font-weight: 700; }
+    .t-active { color: var(--green); font-weight: 700; }
+    .t-normal { color: #999; }
+    .t-purple { color: var(--purple); font-weight: 700; }
+    .t-dot    { color: var(--green); }
+    .t-counter{ color: #666; }
+    .t-help   { color: #555; }
+    .t-pointer{ color: var(--cyan); font-weight: 700; }
+
+    /* ── INSTALL ── */
+    .install-section {
+      padding: 5rem 2rem;
+      text-align: center;
+    }
+    .install-section h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: .5rem;
+    }
+    .install-section p {
+      color: var(--gray);
+      margin-bottom: 2rem;
+    }
+    .code-block {
+      display: inline-flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .9rem 1.4rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .95rem;
+      color: var(--cyan);
+      cursor: pointer;
+      transition: border-color .2s;
+      position: relative;
+    }
+    .code-block:hover { border-color: var(--cyan); }
+    .copy-btn {
+      background: none;
+      border: none;
+      color: var(--gray);
+      cursor: pointer;
+      font-size: .8rem;
+      padding: .2rem .5rem;
+      border-radius: 4px;
+      transition: color .2s, background .2s;
+    }
+    .copy-btn:hover { color: var(--white); background: rgba(255,255,255,.05); }
+    .install-steps {
+      display: flex;
+      flex-direction: column;
+      gap: .8rem;
+      max-width: 500px;
+      margin: 2rem auto 0;
+      text-align: left;
+    }
+    .install-step {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .8rem 1.2rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      color: var(--light);
+    }
+    .step-num {
+      color: var(--cyan);
+      font-weight: 700;
+      min-width: 1.5rem;
+    }
+
+    /* ── FEATURES ── */
+    .features {
+      padding: 5rem 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .section-label {
+      text-align: center;
+      color: var(--cyan);
+      font-size: .8rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: .8rem;
+    }
+    .section-title {
+      text-align: center;
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 700;
+      margin-bottom: .8rem;
+    }
+    .section-sub {
+      text-align: center;
+      color: var(--gray);
+      max-width: 500px;
+      margin: 0 auto 3rem;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.8rem;
+      transition: border-color .2s, transform .2s;
+    }
+    .feature-card:hover { border-color: var(--cyan); transform: translateY(-4px); }
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    .feature-card h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: .5rem;
+    }
+    .feature-card p { color: var(--gray); font-size: .9rem; }
+
+    /* ── USAGE ── */
+    .usage {
+      padding: 5rem 2rem;
+      background: var(--bg2);
+    }
+    .usage-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .usage-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+    .usage-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .usage-card-header {
+      background: var(--bg3);
+      padding: .7rem 1.2rem;
+      font-size: .8rem;
+      color: var(--gray);
+      border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .usage-card-body {
+      padding: 1.2rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .85rem;
+      line-height: 2;
+    }
+    .cmd { color: var(--cyan); }
+    .cmt { color: #555; }
+    .out { color: var(--green); }
+    .warn { color: var(--red); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 3rem 2rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .footer-logo {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: .5rem;
+    }
+    .footer-logo span { color: var(--white); }
+    footer p {
+      color: var(--gray);
+      font-size: .9rem;
+      margin-bottom: 1.2rem;
+    }
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      list-style: none;
+      margin-bottom: 2rem;
+    }
+    .footer-links a {
+      color: var(--gray);
+      text-decoration: none;
+      font-size: .85rem;
+      transition: color .2s;
+    }
+    .footer-links a:hover { color: var(--cyan); }
+    .footer-credit {
+      color: #444;
+      font-size: .8rem;
+    }
+    .footer-credit a {
+      color: var(--purple);
+      text-decoration: none;
+    }
+    .footer-credit a:hover { text-decoration: underline; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .usage-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">⎈ <span>ksw</span></div>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="https://github.com/YonierGomez/kswitch" target="_blank">GitHub</a></li>
+  </ul>
+  <a href="#install" class="nav-cta">Get Started</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge">⎈ v1.0.0 · Now available</div>
+  <h1>Switch Kubernetes<br/>contexts <span class="accent">instantly</span></h1>
+  <p>A blazing-fast interactive TUI for navigating Kubernetes contexts. Fuzzy search, aliases, short-name switching — all from your terminal.</p>
+  <div class="hero-actions">
+    <a href="#install" class="btn-primary">Install with Homebrew</a>
+    <a href="https://github.com/YonierGomez/kswitch" target="_blank" class="btn-secondary">View on GitHub →</a>
+  </div>
+
+  <!-- Terminal demo -->
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+      <div class="terminal-title">ksw — interactive context switcher</div>
+    </div>
+    <div class="terminal-body">
+      <div><span class="t-current">  current </span><span class="t-val">arn:aws:eks:us-east-1:111122223333:cluster/eks-payments-dev</span></div>
+      <div>&nbsp;</div>
+      <div><span class="t-search">  ❯ payments█</span></div>
+      <div><span class="t-dim">  ──────────────────────────────────────────</span></div>
+      <div><span class="t-pointer"> ❯ </span><span class="t-cursor">arn:aws:eks:us-east-1:111122223333:cluster/eks-payments-dev</span><span class="t-dot"> ●</span></div>
+      <div><span class="t-normal">    arn:aws:eks:us-east-1:444455556666:cluster/eks-payments-qa</span></div>
+      <div><span class="t-normal">    arn:aws:eks:us-east-1:777788889999:cluster/eks-payments-pdn</span></div>
+      <div>&nbsp;</div>
+      <div><span class="t-counter">  3/42</span><span class="t-help">  ↑↓ navigate · enter select · esc clear · ctrl+c quit</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section class="install-section" id="install">
+  <p class="section-label">Quick Start</p>
+  <h2 class="section-title">Install in seconds</h2>
+  <p>Available via Homebrew. No dependencies to manage manually.</p>
+
+  <div class="install-steps">
+    <div class="install-step">
+      <span class="step-num">1</span>
+      <span><span style="color:var(--gray)">brew tap </span>YonierGomez/kswitch</span>
+    </div>
+    <div class="install-step">
+      <span class="step-num">2</span>
+      <span><span style="color:var(--gray)">brew install </span>kswitch</span>
+    </div>
+    <div class="install-step">
+      <span class="step-num">3</span>
+      <span><span style="color:var(--cyan)">ksw</span></span>
+    </div>
+  </div>
+
+  <p style="margin-top:2rem; color: var(--gray); font-size:.85rem;">
+    To upgrade: <code style="color:var(--cyan); font-family:'JetBrains Mono',monospace;">brew upgrade kswitch</code>
+  </p>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <p class="section-label">Why ksw?</p>
+  <h2 class="section-title">Everything you need</h2>
+  <p class="section-sub">Designed for engineers who manage dozens of Kubernetes clusters daily.</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🔍</div>
+      <h3>Fuzzy Search</h3>
+      <p>Type any part of a context name and instantly filter results with intelligent fuzzy matching and scoring.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Short-name Switching</h3>
+      <p>Use <code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">ksw payments-dev</code> instead of the full ARN. ksw resolves it automatically.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🏷️</div>
+      <h3>Aliases</h3>
+      <p>Create memorable shortcuts for your most-used contexts. <code style="color:var(--purple);font-family:'JetBrains Mono',monospace;">ksw @prod</code> gets you there instantly.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🟢</div>
+      <h3>Active Context Highlight</h3>
+      <p>Your current context is always highlighted in green in the list, so you never lose track of where you are.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📜</div>
+      <h3>Smart Scroll</h3>
+      <p>Navigate hundreds of contexts with keyboard shortcuts. The cursor always stays visible on screen.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🛠️</div>
+      <h3>Non-interactive Mode</h3>
+      <p>Use <code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">ksw -l</code> to list contexts in scripts and CI pipelines without launching the TUI.</p>
+    </div>
+  </div>
+</section>
+
+<!-- USAGE -->
+<section class="usage" id="usage">
+  <div class="usage-inner">
+    <p class="section-label">Examples</p>
+    <h2 class="section-title">How to use it</h2>
+    <p class="section-sub">From interactive navigation to one-liners, ksw fits every workflow.</p>
+
+    <div class="usage-grid">
+      <div class="usage-card">
+        <div class="usage-card-header">Interactive mode</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw</span></div>
+          <div><span class="cmt"># Opens the interactive TUI</span></div>
+          <div><span class="cmt"># Type to fuzzy-search contexts</span></div>
+          <div><span class="cmt"># ↑↓ to navigate, Enter to switch</span></div>
+        </div>
+      </div>
+      <div class="usage-card">
+        <div class="usage-card-header">Direct switch by short name</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw payments-dev</span></div>
+          <div><span class="out">✔ Switched to arn:aws:eks:.../eks-payments-dev</span></div>
+          <div>&nbsp;</div>
+          <div><span class="cmd">$ ksw payments</span></div>
+          <div><span class="warn">✗ Ambiguous: eks-payments-dev, eks-payments-qa...</span></div>
+        </div>
+      </div>
+      <div class="usage-card">
+        <div class="usage-card-header">Aliases</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw alias prod arn:.../eks-payments-dev</span></div>
+          <div><span class="out">✔ Alias @prod → arn:.../eks-payments-dev</span></div>
+          <div>&nbsp;</div>
+          <div><span class="cmd">$ ksw @prod</span></div>
+          <div><span class="out">✔ Switched to arn:.../eks-payments-dev @prod</span></div>
+        </div>
+      </div>
+      <div class="usage-card">
+        <div class="usage-card-header">List contexts</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw -l</span></div>
+          <div><span class="out">▸ arn:.../eks-payments-dev ●</span></div>
+          <div><span class="cmt">  arn:.../eks-payments-qa</span></div>
+          <div><span class="cmt">  arn:.../eks-payments-pdn</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">⎈ <span>ksw</span></div>
+  <p>Interactive Kubernetes context switcher · v1.0.0</p>
+  <ul class="footer-links">
+    <li><a href="https://github.com/YonierGomez/kswitch" target="_blank">GitHub</a></li>
+    <li><a href="https://github.com/YonierGomez/kswitch/releases" target="_blank">Releases</a></li>
+    <li><a href="https://github.com/YonierGomez/kswitch/issues" target="_blank">Issues</a></li>
+    <li><a href="https://github.com/YonierGomez/kswitch/blob/main/LICENSE" target="_blank">MIT License</a></li>
+  </ul>
+  <p class="footer-credit">
+    Built by <a href="https://www.yonier.com" target="_blank">Yonier Gómez</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/YonierGomez" target="_blank">GitHub</a>
+  </p>
+</footer>
+
+<script>
+  // Copy install command on click
+  document.querySelectorAll('.install-step').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      const text = el.innerText.replace(/^\d+\s*/, '').trim();
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = el.style.borderColor;
+        el.style.borderColor = 'var(--green)';
+        setTimeout(() => el.style.borderColor = orig, 800);
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

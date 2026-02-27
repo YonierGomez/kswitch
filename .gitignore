@@ -1,0 +1,7 @@
+# Binary
+ksw
+kswitch
+*.exe
+
+# Go
+vendor/
