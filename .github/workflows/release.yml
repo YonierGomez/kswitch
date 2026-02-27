@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+
+          GOOS=darwin  GOARCH=amd64  go build -ldflags "-s -w" -o dist/ksw-darwin-amd64  .
+          GOOS=darwin  GOARCH=arm64  go build -ldflags "-s -w" -o dist/ksw-darwin-arm64  .
+          GOOS=linux   GOARCH=amd64  go build -ldflags "-s -w" -o dist/ksw-linux-amd64   .
+          GOOS=linux   GOARCH=arm64  go build -ldflags "-s -w" -o dist/ksw-linux-arm64   .
+
+          # Create tarballs
+          cd dist
+          tar czf ksw-darwin-amd64.tar.gz  ksw-darwin-amd64
+          tar czf ksw-darwin-arm64.tar.gz  ksw-darwin-arm64
+          tar czf ksw-linux-amd64.tar.gz   ksw-linux-amd64
+          tar czf ksw-linux-arm64.tar.gz   ksw-linux-arm64
+
+          # Generate checksums
+          sha256sum ksw-*.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Install
+
+            ### Homebrew (macOS / Linux)
+            ```bash
+            brew tap YonierGomez/kswitch
+            brew install kswitch
+            ```
+
+            ### Manual (Linux)
+            ```bash
+            # amd64
+            curl -sL https://github.com/YonierGomez/kswitch/releases/download/${{ steps.version.outputs.VERSION }}/ksw-linux-amd64.tar.gz | tar xz
+            chmod +x ksw-linux-amd64
+            sudo mv ksw-linux-amd64 /usr/local/bin/ksw
+
+            # arm64
+            curl -sL https://github.com/YonierGomez/kswitch/releases/download/${{ steps.version.outputs.VERSION }}/ksw-linux-arm64.tar.gz | tar xz
+            chmod +x ksw-linux-arm64
+            sudo mv ksw-linux-arm64 /usr/local/bin/ksw
+            ```
+
+            ### Manual (macOS)
+            ```bash
+            # Apple Silicon (M1/M2/M3)
+            curl -sL https://github.com/YonierGomez/kswitch/releases/download/${{ steps.version.outputs.VERSION }}/ksw-darwin-arm64.tar.gz | tar xz
+            chmod +x ksw-darwin-arm64
+            sudo mv ksw-darwin-arm64 /usr/local/bin/ksw
+
+            # Intel
+            curl -sL https://github.com/YonierGomez/kswitch/releases/download/${{ steps.version.outputs.VERSION }}/ksw-darwin-amd64.tar.gz | tar xz
+            chmod +x ksw-darwin-amd64
+            sudo mv ksw-darwin-amd64 /usr/local/bin/ksw
+            ```
+          files: |
+            dist/ksw-darwin-amd64.tar.gz
+            dist/ksw-darwin-arm64.tar.gz
+            dist/ksw-linux-amd64.tar.gz
+            dist/ksw-linux-arm64.tar.gz
+            dist/checksums.txt
+          draft: false
+          prerelease: false
