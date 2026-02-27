@@ -96,14 +96,21 @@ In the TUI, pinned contexts appear in **yellow** with a `★` marker. Press `Ctr
 
 ### Previous context
 
-Switch back to the last context instantly:
+Switch back to the last context instantly — like `cd -` in bash:
 
 ```bash
 ksw -
 # ✔ Switched to arn:.../eks-payments-qa
+
+# Toggle back and forth between two contexts
+ksw payments-dev   # switch to dev
+ksw -              # back to qa
+ksw -              # back to dev
 ```
 
 ### History
+
+Show the last 10 contexts you visited:
 
 ```bash
 ksw history
@@ -111,6 +118,18 @@ ksw history
 #   1  arn:.../eks-payments-dev ●
 #   2  arn:.../eks-payments-qa
 #   3  arn:.../eks-payments-pdn
+#   4  arn:.../eks-orders-dev
+#   5  arn:.../eks-orders-pdn
+```
+
+Switch directly to any history entry by number:
+
+```bash
+ksw history 3
+# ✔ Switched to arn:.../eks-payments-pdn
+
+ksw history 5
+# ✔ Switched to arn:.../eks-orders-pdn
 ```
 
 ### Aliases
