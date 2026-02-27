@@ -4,7 +4,51 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ksw – Kubernetes Context Switcher</title>
-  <meta name="description" content="ksw is a blazing-fast interactive Kubernetes context switcher with fuzzy search, aliases and short-name switching." />
+  <meta name="description" content="ksw is a blazing-fast interactive Kubernetes context switcher. Fuzzy search, pins, aliases, history and short-name switching — single binary, no dependencies." />
+  <meta name="keywords" content="kubernetes, context switcher, kubectl, kubeconfig, k8s, terminal, TUI, CLI, kswitch" />
+  <meta name="author" content="Yonier Gómez" />
+
+  <!-- Favicon SVG inline -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230d0d1a'/><text y='.9em' font-size='80' x='10' fill='%2300d4ff'>⎈</text></svg>" />
+
+  <!-- Open Graph / Social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://yoniergomez.github.io/kswitch/" />
+  <meta property="og:title" content="ksw – Kubernetes Context Switcher" />
+  <meta property="og:description" content="Blazing-fast interactive TUI for switching Kubernetes contexts. Fuzzy search, pins, aliases, history — single binary." />
+  <meta property="og:image" content="https://yoniergomez.github.io/kswitch/og-image.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ksw – Kubernetes Context Switcher" />
+  <meta name="twitter:description" content="Blazing-fast interactive TUI for switching Kubernetes contexts. Fuzzy search, pins, aliases, history — single binary." />
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://yoniergomez.github.io/kswitch/" />
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ksw",
+    "alternateName": "kswitch",
+    "description": "Blazing-fast interactive Kubernetes context switcher with fuzzy search, pins, aliases and history.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Linux",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "author": {
+      "@type": "Person",
+      "name": "Yonier Gómez",
+      "url": "https://www.yonier.com"
+    },
+    "url": "https://yoniergomez.github.io/kswitch/",
+    "downloadUrl": "https://github.com/YonierGomez/kswitch/releases",
+    "softwareVersion": "1.1.1",
+    "license": "https://github.com/YonierGomez/kswitch/blob/main/LICENSE"
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -402,6 +446,36 @@
     }
     .footer-credit a:hover { text-decoration: underline; }
 
+    /* ── ANIMATIONS ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-left {
+      opacity: 0;
+      transform: translateX(-24px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .reveal-left.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    /* stagger delay for grid children */
+    .stagger > *:nth-child(1) { transition-delay: 0s; }
+    .stagger > *:nth-child(2) { transition-delay: 0.07s; }
+    .stagger > *:nth-child(3) { transition-delay: 0.14s; }
+    .stagger > *:nth-child(4) { transition-delay: 0.21s; }
+    .stagger > *:nth-child(5) { transition-delay: 0.28s; }
+    .stagger > *:nth-child(6) { transition-delay: 0.35s; }
+    .stagger > *:nth-child(7) { transition-delay: 0.42s; }
+    .stagger > *:nth-child(8) { transition-delay: 0.49s; }
+    .stagger > *:nth-child(9) { transition-delay: 0.56s; }
+
     /* ── RESPONSIVE ── */
     @media (max-width: 640px) {
       .nav-links { display: none; }
@@ -487,7 +561,7 @@
   <h2 class="section-title">Everything you need</h2>
   <p class="section-sub">Designed for engineers who manage dozens of Kubernetes clusters daily.</p>
 
-  <div class="features-grid">
+  <div class="features-grid stagger">
     <div class="feature-card">
       <div class="feature-icon">🔍</div>
       <h3>Fuzzy Search</h3>
@@ -524,9 +598,14 @@
       <p>Pin your most-used contexts to always appear at the top. Use <code style="color:var(--yellow);font-family:'JetBrains Mono',monospace;">Ctrl+P</code> in the TUI to pin/unpin instantly.</p>
     </div>
     <div class="feature-card">
+      <div class="feature-icon">⏮️</div>
+      <h3>Previous Context</h3>
+      <p><code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">ksw -</code> switches back to the last context instantly — like <code style="color:var(--gray);font-family:'JetBrains Mono',monospace;">cd -</code> in bash. Toggle between two clusters in milliseconds.</p>
+    </div>
+    <div class="feature-card">
       <div class="feature-icon">🕐</div>
-      <h3>History & Previous</h3>
-      <p><code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">ksw -</code> switches back to the previous context instantly. <code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">ksw history</code> shows recent contexts.</p>
+      <h3>History</h3>
+      <p><code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">ksw history</code> shows your last 10 contexts. Jump to any entry with <code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;">ksw history 3</code> — no TUI needed.</p>
     </div>
   </div>
 </section>
@@ -538,14 +617,14 @@
     <h2 class="section-title">How to use it</h2>
     <p class="section-sub">From interactive navigation to one-liners, ksw fits every workflow.</p>
 
-    <div class="usage-grid">
+    <div class="usage-grid stagger">
       <div class="usage-card">
         <div class="usage-card-header">Interactive mode</div>
         <div class="usage-card-body">
           <div><span class="cmd">$ ksw</span></div>
           <div><span class="cmt"># Opens the interactive TUI</span></div>
           <div><span class="cmt"># Type to fuzzy-search contexts</span></div>
-          <div><span class="cmt"># ↑↓ to navigate, Enter to switch</span></div>
+          <div><span class="cmt"># ↑↓ navigate · Ctrl+P pin · Ctrl+H short</span></div>
         </div>
       </div>
       <div class="usage-card">
@@ -559,13 +638,45 @@
         </div>
       </div>
       <div class="usage-card">
+        <div class="usage-card-header">Previous context</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw payments-dev</span></div>
+          <div><span class="out">✔ Switched to arn:.../eks-payments-dev</span></div>
+          <div><span class="cmd">$ ksw -</span></div>
+          <div><span class="out">✔ Switched to arn:.../eks-payments-qa</span></div>
+          <div><span class="cmd">$ ksw -</span></div>
+          <div><span class="out">✔ Switched to arn:.../eks-payments-dev</span></div>
+        </div>
+      </div>
+      <div class="usage-card">
+        <div class="usage-card-header">History</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw history</span></div>
+          <div><span class="out">  1  eks-payments-dev ●</span></div>
+          <div><span class="cmt">  2  eks-payments-qa</span></div>
+          <div><span class="cmt">  3  eks-orders-pdn</span></div>
+          <div><span class="cmd">$ ksw history 3</span></div>
+          <div><span class="out">✔ Switched to arn:.../eks-orders-pdn</span></div>
+        </div>
+      </div>
+      <div class="usage-card">
         <div class="usage-card-header">Aliases</div>
         <div class="usage-card-body">
-          <div><span class="cmd">$ ksw alias prod arn:.../eks-payments-dev</span></div>
+          <div><span class="cmd">$ ksw alias prod eks-payments-dev</span></div>
           <div><span class="out">✔ Alias @prod → arn:.../eks-payments-dev</span></div>
-          <div>&nbsp;</div>
           <div><span class="cmd">$ ksw @prod</span></div>
           <div><span class="out">✔ Switched to arn:.../eks-payments-dev @prod</span></div>
+        </div>
+      </div>
+      <div class="usage-card">
+        <div class="usage-card-header">Pin favorites</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw pin payments-dev</span></div>
+          <div><span class="out">✔ Pinned ★ arn:.../eks-payments-dev</span></div>
+          <div><span class="cmd">$ ksw pin ls</span></div>
+          <div><span class="out">  ★ arn:.../eks-payments-dev</span></div>
+          <div><span class="cmd">$ ksw pin rm payments-dev</span></div>
+          <div><span class="out">✔ Unpinned arn:.../eks-payments-dev</span></div>
         </div>
       </div>
       <div class="usage-card">
@@ -575,6 +686,7 @@
           <div><span class="out">▸ arn:.../eks-payments-dev ●</span></div>
           <div><span class="cmt">  arn:.../eks-payments-qa</span></div>
           <div><span class="cmt">  arn:.../eks-payments-pdn</span></div>
+          <div><span class="cmt">  arn:.../eks-orders-dev</span></div>
         </div>
       </div>
     </div>
@@ -599,7 +711,32 @@
 </footer>
 
 <script>
-  // Copy install command on click
+  // ── Scroll animations ──
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1 });
+
+  // Add reveal class to elements and observe them
+  document.querySelectorAll('.feature-card, .usage-card, .install-step').forEach(el => {
+    el.classList.add('reveal');
+    observer.observe(el);
+  });
+
+  document.querySelectorAll('.section-label, .section-title, .section-sub').forEach(el => {
+    el.classList.add('reveal');
+    observer.observe(el);
+  });
+
+  document.querySelectorAll('.install-section h2, .install-section p, .install-steps').forEach(el => {
+    el.classList.add('reveal');
+    observer.observe(el);
+  });
+
+  // ── Copy install command on click ──
   document.querySelectorAll('.install-step').forEach(el => {
     el.style.cursor = 'pointer';
     el.addEventListener('click', () => {

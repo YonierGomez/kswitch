@@ -704,12 +704,61 @@ Config stored in ~/.ksw.json
 			for alias, ctx := range cfg.Aliases {
 				reverseAlias[ctx] = alias
 			}
+
+			// If a number is provided, switch to that history entry
+			if len(os.Args) >= 3 {
+				n := 0
+				for _, c := range os.Args[2] {
+					if c < '0' || c > '9' {
+						fmt.Fprintf(os.Stderr, "%s Invalid number '%s'. Usage: ksw history <number>\n", warnStyle.Render("✗"), os.Args[2])
+						os.Exit(1)
+					}
+					n = n*10 + int(c-'0')
+				}
+				if n < 1 || n > len(cfg.History) {
+					fmt.Fprintf(os.Stderr, "%s Number must be between 1 and %d\n", warnStyle.Render("✗"), len(cfg.History))
+					os.Exit(1)
+				}
+				target := cfg.History[n-1]
+				recordHistory(&cfg, current, target)
+				if err := switchContext(target); err != nil {
+					// Try suffix/substring match
+					contexts, cerr := getContexts()
+					if cerr != nil {
+						fmt.Fprintln(os.Stderr, cerr)
+						os.Exit(1)
+					}
+					var matches []string
+					for _, ctx := range contexts {
+						if strings.HasSuffix(ctx, "/"+target) || strings.Contains(ctx, target) {
+							matches = append(matches, ctx)
+						}
+					}
+					if len(matches) == 1 {
+						target = matches[0]
+						if err := switchContext(target); err != nil {
+							fmt.Fprintf(os.Stderr, "%s Context '%s' not found.\n", warnStyle.Render("✗"), target)
+							os.Exit(1)
+						}
+					} else {
+						fmt.Fprintf(os.Stderr, "%s Context '%s' not found.\n", warnStyle.Render("✗"), target)
+						os.Exit(1)
+					}
+				}
+				_ = saveConfig(cfg)
+				alias := ""
+				if a, ok := reverseAlias[target]; ok {
+					alias = " " + aliasStyle.Render("@"+a)
+				}
+				fmt.Printf("%s Switched to %s%s\n", successStyle.Render("✔"), target, alias)
+				return
+			}
+
+			// Otherwise just list history
 			fmt.Println(dimStyle.Render("  Recent contexts:"))
 			for i, ctx := range cfg.History {
-				marker := "  "
 				name := normalItemStyle.Render(ctx)
 				if ctx == current {
-					marker = "  "
 					name = activeItemStyle.Render(ctx)
 				}
 				alias := ""
@@ -720,7 +769,7 @@ Config stored in ~/.ksw.json
 				if ctx == current {
 					active = " " + activeTag
 				}
-				fmt.Printf("%s%d  %s%s%s\n", marker, i+1, name, alias, active)
+				fmt.Printf("  %d  %s%s%s\n", i+1, name, alias, active)
 			}
 			return
 
@@ -855,12 +904,12 @@ Config stored in ~/.ksw.json
 
 	final := result.(model)
 	if final.chosen != "" && final.chosen != current {
-		recordHistory(&cfg, current, final.chosen)
+		recordHistory(&final.cfg, current, final.chosen)
 		if err := switchContext(final.chosen); err != nil {
 			fmt.Fprintf(os.Stderr, "Error switching to %s: %v\n", final.chosen, err)
 			os.Exit(1)
 		}
-		_ = saveConfig(cfg)
+		_ = saveConfig(final.cfg)
 		alias := final.aliasFor(final.chosen)
 		extra := ""
 		if alias != "" {
