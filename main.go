@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 // ── Styles ─────────────────────────────────────────────
 var (
@@ -79,10 +79,11 @@ var (
 
 // ── Config (aliases + history + pins) ─────────────────
 type config struct {
-	Aliases  map[string]string `json:"aliases"`
-	History  []string          `json:"history,omitempty"`
-	Previous string            `json:"previous,omitempty"`
-	Pins     []string          `json:"pins,omitempty"`
+	Aliases    map[string]string `json:"aliases"`
+	History    []string          `json:"history,omitempty"`
+	Previous   string            `json:"previous,omitempty"`
+	Pins       []string          `json:"pins,omitempty"`
+	ShortNames bool              `json:"short_names,omitempty"`
 }
 
 const maxHistory = 10
@@ -236,7 +237,17 @@ type model struct {
 	search         string
 	cfg            config
 	terminalHeight int
+	terminalWidth  int
 	quitting       bool
+	shortNames     bool
+}
+
+// shortName extracts the last segment after '/' from a context name
+func shortName(ctx string) string {
+	if idx := strings.LastIndex(ctx, "/"); idx >= 0 {
+		return ctx[idx+1:]
+	}
+	return ctx
 }
 
 func initialModel(contexts []string, current string, cfg config) model {
@@ -245,6 +256,8 @@ func initialModel(contexts []string, current string, cfg config) model {
 		current:        current,
 		cfg:            cfg,
 		terminalHeight: 24,
+		terminalWidth:  80,
+		shortNames:     cfg.ShortNames,
 	}
 	m.resetFilter()
 	for i, idx := range m.filtered {
@@ -379,6 +392,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.terminalHeight = msg.Height
+		m.terminalWidth = msg.Width
 
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -451,6 +465,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+		case tea.KeyCtrlH:
+			// Toggle short name view and persist
+			m.shortNames = !m.shortNames
+			m.cfg.ShortNames = m.shortNames
+			_ = saveConfig(m.cfg)
 		case tea.KeyEnter:
 			if len(m.filtered) > 0 {
 				m.chosen = m.contexts[m.filtered[m.cursor]]
@@ -482,8 +501,14 @@ func (m model) View() string {
 	// ── Current context ──
 	currentAlias := m.aliasFor(m.current)
 	currentLabel := m.current
+	if m.shortNames {
+		currentLabel = shortName(m.current)
+	}
 	if currentAlias != "" {
 		currentLabel += " " + aliasStyle.Render("@"+currentAlias)
+	}
+	if m.shortNames {
+		currentLabel = dimStyle.Render("[short] ") + currentLabel
 	}
 	b.WriteString("  " + currentLabelStyle.Render("  current ") + currentValueStyle.Render(currentLabel) + "\n")
 	b.WriteString("\n")
@@ -527,15 +552,20 @@ func (m model) View() string {
 
 		isPinned := m.isPinned(ctx)
 
+		displayCtx := ctx
+		if m.shortNames {
+			displayCtx = shortName(ctx)
+		}
+
 		if i == m.cursor {
 			pointer = " ❯ "
-			name = selectedItemStyle.Render(ctx)
+			name = selectedItemStyle.Render(displayCtx)
 		} else if isActive {
-			name = activeItemStyle.Render(ctx)
+			name = activeItemStyle.Render(displayCtx)
 		} else if isPinned {
-			name = pinItemStyle.Render(ctx)
+			name = pinItemStyle.Render(displayCtx)
 		} else {
-			name = normalItemStyle.Render(ctx)
+			name = normalItemStyle.Render(displayCtx)
 		}
 
 		extras := ""
@@ -559,8 +589,16 @@ func (m model) View() string {
 
 	// ── Footer ──
 	b.WriteString("\n")
-	b.WriteString("  " + counterStyle.Render(fmt.Sprintf("  %d/%d", len(m.filtered), len(m.contexts))) +
-		helpStyle.Render("  ↑↓ navigate · enter select · ctrl+p pin/unpin · ctrl+t jump-pin · esc clear · ctrl+c quit") + "\n")
+	counter := counterStyle.Render(fmt.Sprintf("  %d/%d", len(m.filtered), len(m.contexts)))
+	var help string
+	if m.terminalWidth >= 120 {
+		help = "  ↑↓ navigate · enter select · ctrl+p pin/unpin · ctrl+t jump-pin · ctrl+h short · esc clear · ctrl+c quit"
+	} else if m.terminalWidth >= 80 {
+		help = "  ↑↓ · enter select · ^p pin · ^t pins · ^h short · esc · ^c quit"
+	} else {
+		help = "  ↑↓ enter · ^p pin · ^h short · esc ^c"
+	}
+	b.WriteString("  " + counter + helpStyle.Render(help) + "\n")
 
 	return b.String()
 }
