@@ -60,6 +60,7 @@ ksw -h                       # Help
 | `Enter`      | Switch to highlighted context       |
 | `Ctrl+P`     | Pin / unpin current context (★)     |
 | `Ctrl+T`     | Jump to first pinned context        |
+| `Ctrl+H`     | Toggle short name view (persisted)  |
 | `Esc`        | Clear filter / Quit                 |
 | `Ctrl+C`     | Quit                                |
 
