@@ -535,27 +535,49 @@
   <h2 class="section-title">Install in seconds</h2>
   <p>Available via Homebrew. No dependencies to manage manually.</p>
 
+  <!-- Homebrew -->
   <div class="install-steps">
-    <div class="install-step">
-      <span class="step-num">1</span>
-      <span><span style="color:var(--gray)">brew tap </span>YonierGomez/kswitch</span>
+    <div class="install-step" style="padding:0; overflow:hidden; gap:0;">
+      <div style="display:flex; align-items:center; gap:1rem; padding:.8rem 1.2rem; flex:1;">
+        <span class="step-num">1</span>
+        <span><span style="color:var(--gray)">brew tap </span>YonierGomez/kswitch</span>
+      </div>
+      <button onclick="event.stopPropagation(); copyCmd(this,'brew tap YonierGomez/kswitch')" title="Copy" style="flex-shrink:0; background:var(--bg2); border:none; border-left:1px solid var(--border); cursor:pointer; color:var(--gray); font-size:.85rem; padding:.5rem .8rem; transition:color .2s, background .2s; align-self:stretch;">⎘</button>
     </div>
-    <div class="install-step">
-      <span class="step-num">2</span>
-      <span><span style="color:var(--gray)">brew install </span>kswitch</span>
+    <div class="install-step" style="padding:0; overflow:hidden; gap:0;">
+      <div style="display:flex; align-items:center; gap:1rem; padding:.8rem 1.2rem; flex:1;">
+        <span class="step-num">2</span>
+        <span><span style="color:var(--gray)">brew install </span>kswitch</span>
+      </div>
+      <button onclick="event.stopPropagation(); copyCmd(this,'brew install kswitch')" title="Copy" style="flex-shrink:0; background:var(--bg2); border:none; border-left:1px solid var(--border); cursor:pointer; color:var(--gray); font-size:.85rem; padding:.5rem .8rem; transition:color .2s, background .2s; align-self:stretch;">⎘</button>
     </div>
-    <div class="install-step">
-      <span class="step-num">3</span>
-      <span><span style="color:var(--cyan)">ksw</span></span>
+    <div class="install-step" style="padding:0; overflow:hidden; gap:0;">
+      <div style="display:flex; align-items:center; gap:1rem; padding:.8rem 1.2rem; flex:1;">
+        <span class="step-num">3</span>
+        <span><span style="color:var(--cyan)">ksw</span></span>
+      </div>
+      <button onclick="event.stopPropagation(); copyCmd(this,'ksw')" title="Copy" style="flex-shrink:0; background:var(--bg2); border:none; border-left:1px solid var(--border); cursor:pointer; color:var(--gray); font-size:.85rem; padding:.5rem .8rem; transition:color .2s, background .2s; align-self:stretch;">⎘</button>
     </div>
   </div>
 
   <p style="margin-top:2rem; color: var(--gray); font-size:.85rem;">
     To upgrade: <code style="color:var(--cyan); font-family:'JetBrains Mono',monospace;">brew upgrade kswitch</code>
   </p>
-  <p style="margin-top:1rem; color: var(--gray); font-size:.85rem;">
-    Linux users: download pre-built binaries from <a href="https://github.com/YonierGomez/kswitch/releases" target="_blank" style="color:var(--cyan)">Releases</a> (amd64 & arm64)
-  </p>
+
+  <!-- One-liner -->
+  <div style="max-width:500px; margin: 1.5rem auto 0; text-align:left;">
+    <p style="color:var(--gray); font-size:.8rem; margin-bottom:.5rem;">Or install with a single command (macOS & Linux):</p>
+    <div id="oneliner-box" style="display:flex; align-items:stretch; background:var(--bg3); border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+      <div style="overflow-x:auto; white-space:nowrap; padding:.8rem 1.2rem; font-family:'JetBrains Mono',monospace; font-size:.8rem; flex:1;">
+        <span style="color:var(--gray)">curl -sL </span><span style="color:var(--cyan)">https://raw.githubusercontent.com/YonierGomez/kswitch/main/install.sh</span><span style="color:var(--gray)"> | bash</span>
+      </div>
+      <button id="copy-oneliner" onclick="copyOneliner()" title="Copy to clipboard" style="flex-shrink:0; background:var(--bg2); border:none; border-left:1px solid var(--border); cursor:pointer; color:var(--gray); font-size:.85rem; padding:.5rem .8rem; transition:color .2s, background .2s;">⎘</button>
+    </div>
+    <p style="color:var(--gray); font-size:.75rem; margin-top:.4rem;">
+      Detects your OS and architecture automatically. &nbsp;·&nbsp;
+      <a href="https://github.com/YonierGomez/kswitch/releases" target="_blank" style="color:var(--cyan)">All releases →</a>
+    </p>
+  </div>
 </section>
 
 <!-- FEATURES -->
@@ -751,6 +773,36 @@
       });
     });
   });
+
+  // ── Copy brew step ──
+  function copyCmd(btn, cmd) {
+    navigator.clipboard.writeText(cmd).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✔';
+      btn.style.color = 'var(--green)';
+      setTimeout(() => {
+        btn.textContent = orig;
+        btn.style.color = 'var(--gray)';
+      }, 1500);
+    });
+  }
+
+  // ── Copy one-liner ──
+  function copyOneliner() {
+    const cmd = 'curl -sL https://raw.githubusercontent.com/YonierGomez/kswitch/main/install.sh | bash';
+    navigator.clipboard.writeText(cmd).then(() => {
+      const btn = document.getElementById('copy-oneliner');
+      const box = document.getElementById('oneliner-box');
+      btn.textContent = '✔';
+      btn.style.color = 'var(--green)';
+      box.style.borderColor = 'var(--green)';
+      setTimeout(() => {
+        btn.textContent = '⎘';
+        btn.style.color = 'var(--gray)';
+        box.style.borderColor = 'var(--border)';
+      }, 1500);
+    });
+  }
 </script>
 
 </body>
