@@ -65,6 +65,13 @@ ksw <name>                   # Switch directly (short name ok: ksw payments-dev)
 ksw -                        # Switch to previous context
 ksw @<alias>                 # Switch using alias
 ksw history                  # Show recent context history
+ksw history <n>              # Switch to history entry by number
+ksw group add <name> [ctx]   # Create a group and add contexts to it
+ksw group rm <name>          # Remove a group
+ksw group ls                 # List all groups with their members
+ksw group use <name>         # Open TUI filtered to a group
+ksw group add-ctx <g> <ctx>  # Add a context to an existing group
+ksw group rm-ctx <g> <ctx>   # Remove a context from a group
 ksw pin <name>               # Pin a context to the top of the list
 ksw pin rm <name>            # Unpin a context
 ksw pin ls                   # List pinned contexts
@@ -162,6 +169,36 @@ ksw history 3
 
 ksw history 5
 # ✔ Switched to arn:.../eks-orders-pdn
+```
+
+### Groups
+
+Organize contexts into named groups and open the TUI filtered to only those contexts:
+
+```bash
+# Create a group with multiple contexts (short names work)
+ksw group add payments eks-payments-dev eks-payments-qa eks-payments-pdn
+# ✔ Group payments — added 3 context(s)
+
+# Open TUI showing only the payments group
+ksw group use payments
+# [payments] label shown in header, only 3 contexts visible
+
+# List all groups
+ksw group ls
+# payments (3 contexts)
+#   · arn:.../eks-payments-dev
+#   · arn:.../eks-payments-qa
+#   · arn:.../eks-payments-pdn
+
+# Add a context to an existing group
+ksw group add-ctx payments eks-payments-staging
+
+# Remove a context from a group
+ksw group rm-ctx payments eks-payments-staging
+
+# Remove a group entirely
+ksw group rm payments
 ```
 
 ### Aliases

@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const version = "1.1.3"
+const version = "1.2.0"
 
 // ── Styles ─────────────────────────────────────────────
 var (
@@ -77,13 +77,14 @@ var (
 	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#555"))
 )
 
-// ── Config (aliases + history + pins) ─────────────────
+// ── Config (aliases + history + pins + groups) ────────
 type config struct {
-	Aliases    map[string]string `json:"aliases"`
-	History    []string          `json:"history,omitempty"`
-	Previous   string            `json:"previous,omitempty"`
-	Pins       []string          `json:"pins,omitempty"`
-	ShortNames bool              `json:"short_names,omitempty"`
+	Aliases    map[string]string   `json:"aliases"`
+	History    []string            `json:"history,omitempty"`
+	Previous   string              `json:"previous,omitempty"`
+	Pins       []string            `json:"pins,omitempty"`
+	ShortNames bool                `json:"short_names,omitempty"`
+	Groups     map[string][]string `json:"groups,omitempty"`
 }
 
 const maxHistory = 10
@@ -94,7 +95,7 @@ func configPath() string {
 }
 
 func loadConfig() config {
-	c := config{Aliases: make(map[string]string)}
+	c := config{Aliases: make(map[string]string), Groups: make(map[string][]string)}
 	data, err := os.ReadFile(configPath())
 	if err != nil {
 		return c
@@ -102,6 +103,9 @@ func loadConfig() config {
 	_ = json.Unmarshal(data, &c)
 	if c.Aliases == nil {
 		c.Aliases = make(map[string]string)
+	}
+	if c.Groups == nil {
+		c.Groups = make(map[string][]string)
 	}
 	return c
 }
@@ -240,6 +244,7 @@ type model struct {
 	terminalWidth  int
 	quitting       bool
 	shortNames     bool
+	activeGroup    string // "" = all contexts
 }
 
 // shortName extracts the last segment after '/' from a context name
@@ -250,14 +255,15 @@ func shortName(ctx string) string {
 	return ctx
 }
 
-func initialModel(contexts []string, current string, cfg config) model {
+func initialModel(contexts []string, current string, cfg config, activeGroup string) model {
 	m := model{
-		contexts:       contexts,
-		current:        current,
-		cfg:            cfg,
+		contexts:    contexts,
+		current:     current,
+		cfg:         cfg,
 		terminalHeight: 24,
 		terminalWidth:  80,
-		shortNames:     cfg.ShortNames,
+		shortNames:  cfg.ShortNames,
+		activeGroup: activeGroup,
 	}
 	m.resetFilter()
 	for i, idx := range m.filtered {
@@ -306,10 +312,26 @@ func (m *model) sortedByPins(indices []int) []int {
 	return append(pinned, rest...)
 }
 
+// groupSet returns the set of contexts in the active group (nil = all)
+func (m *model) groupSet() map[string]bool {
+	if m.activeGroup == "" {
+		return nil
+	}
+	members := m.cfg.Groups[m.activeGroup]
+	set := make(map[string]bool, len(members))
+	for _, c := range members {
+		set[c] = true
+	}
+	return set
+}
+
 func (m *model) resetFilter() {
-	indices := make([]int, len(m.contexts))
-	for i := range m.contexts {
-		indices[i] = i
+	gs := m.groupSet()
+	var indices []int
+	for i, ctx := range m.contexts {
+		if gs == nil || gs[ctx] {
+			indices = append(indices, i)
+		}
 	}
 	m.filtered = m.sortedByPins(indices)
 	m.scrollOffset = 0
@@ -322,6 +344,7 @@ func (m *model) applyFilter() {
 	}
 
 	query := m.search
+	gs := m.groupSet()
 
 	// Build searchable strings: context name + any aliases pointing to it
 	reverseAlias := make(map[string][]string)
@@ -331,6 +354,9 @@ func (m *model) applyFilter() {
 
 	var results []scored
 	for i, ctx := range m.contexts {
+		if gs != nil && !gs[ctx] {
+			continue
+		}
 		// Match against context name
 		searchable := ctx
 		if aliases, ok := reverseAlias[ctx]; ok {
@@ -513,7 +539,11 @@ func (m model) View() string {
 	} else {
 		currentDisplay = currentValueStyle.Render(currentName)
 	}
-	b.WriteString("  " + currentLabelStyle.Render("  current ") + currentDisplay + "\n")
+	groupLabel := ""
+	if m.activeGroup != "" {
+		groupLabel = "  " + pinItemStyle.Render("["+m.activeGroup+"]")
+	}
+	b.WriteString("  " + currentLabelStyle.Render("  current ") + currentDisplay + groupLabel + "\n")
 	b.WriteString("\n")
 
 	// ── Search bar ──
@@ -626,6 +656,12 @@ Usage:
   ksw @<alias>               Switch using an alias
   ksw history                Show recent context history
   ksw history <n>            Switch to history entry by number
+  ksw group add <name> [ctx] Create a group and add contexts to it
+  ksw group rm <name>        Remove a group
+  ksw group ls               List all groups
+  ksw group use <name>       Open TUI filtered to a group
+  ksw group add-ctx <g> <ctx> Add a context to an existing group
+  ksw group rm-ctx <g> <ctx>  Remove a context from a group
   ksw pin <name>             Pin a context to the top of the list
   ksw pin rm <name>          Unpin a context
   ksw pin ls                 List pinned contexts
@@ -789,6 +825,10 @@ Config stored in ~/.ksw.json
 			handlePin(cfg)
 			return
 
+		case "group":
+			handleGroup(cfg)
+			return
+
 		case "alias":
 			handleAlias(cfg)
 			return
@@ -897,7 +937,7 @@ Config stored in ~/.ksw.json
 	}
 
 	current := getCurrentContext()
-	m := initialModel(contexts, current, cfg)
+	m := initialModel(contexts, current, cfg, "")
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	result, err := p.Run()
@@ -1292,6 +1332,263 @@ func handlePin(cfg config) {
 			os.Exit(1)
 		}
 		fmt.Printf("%s Pinned %s %s\n", successStyle.Render("✔"), pinTag, pinItemStyle.Render(resolved))
+	}
+}
+
+// ── handleGroup ────────────────────────────────────────
+func resolveContext(name string, contexts []string) (string, error) {
+	for _, ctx := range contexts {
+		if ctx == name {
+			return ctx, nil
+		}
+	}
+	var matches []string
+	for _, ctx := range contexts {
+		if strings.HasSuffix(ctx, "/"+name) || strings.Contains(ctx, name) {
+			matches = append(matches, ctx)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("ambiguous '%s', matches:\n  %s", name, strings.Join(matches, "\n  "))
+	}
+	return "", fmt.Errorf("context '%s' not found", name)
+}
+
+func handleGroup(cfg config) {
+	if len(os.Args) < 3 {
+		// No subcommand: list groups
+		if len(cfg.Groups) == 0 {
+			fmt.Println(dimStyle.Render("No groups configured. Use: ksw group add <name> [ctx...]"))
+			return
+		}
+		names := make([]string, 0, len(cfg.Groups))
+		for n := range cfg.Groups {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			fmt.Printf("  %s %s %s\n", pinItemStyle.Render("◆"), aliasStyle.Render(n), dimStyle.Render(fmt.Sprintf("(%d contexts)", len(cfg.Groups[n]))))
+		}
+		return
+	}
+
+	sub := os.Args[2]
+
+	switch sub {
+	case "ls", "list":
+		if len(cfg.Groups) == 0 {
+			fmt.Println(dimStyle.Render("No groups configured. Use: ksw group add <name> [ctx...]"))
+			return
+		}
+		names := make([]string, 0, len(cfg.Groups))
+		for n := range cfg.Groups {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			fmt.Printf("  %s %s\n", aliasStyle.Render(n), dimStyle.Render(fmt.Sprintf("(%d contexts)", len(cfg.Groups[n]))))
+			for _, ctx := range cfg.Groups[n] {
+				fmt.Printf("      %s %s\n", dimStyle.Render("·"), normalItemStyle.Render(ctx))
+			}
+		}
+
+	case "add":
+		// ksw group add <name> [ctx1 ctx2 ...]
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "Usage: ksw group add <name> [ctx...]")
+			os.Exit(1)
+		}
+		groupName := os.Args[3]
+		contexts, err := getContexts()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		// Resolve any provided contexts
+		var resolved []string
+		for _, arg := range os.Args[4:] {
+			ctx, err := resolveContext(arg, contexts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s %v\n", warnStyle.Render("✗"), err)
+				os.Exit(1)
+			}
+			// Avoid duplicates
+			found := false
+			for _, r := range resolved {
+				if r == ctx {
+					found = true
+					break
+				}
+			}
+			if !found {
+				resolved = append(resolved, ctx)
+			}
+		}
+		// Merge with existing group members
+		existing := cfg.Groups[groupName]
+		existingSet := make(map[string]bool, len(existing))
+		for _, c := range existing {
+			existingSet[c] = true
+		}
+		added := 0
+		for _, ctx := range resolved {
+			if !existingSet[ctx] {
+				existing = append(existing, ctx)
+				added++
+			}
+		}
+		cfg.Groups[groupName] = existing
+		if err := saveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		if len(resolved) == 0 {
+			fmt.Printf("%s Created empty group %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName))
+			fmt.Printf("  Add contexts with: %s\n", dimStyle.Render("ksw group add-ctx "+groupName+" <ctx>"))
+		} else {
+			fmt.Printf("%s Group %s — added %d context(s)\n", successStyle.Render("✔"), aliasStyle.Render(groupName), added)
+			for _, ctx := range resolved {
+				fmt.Printf("  %s %s\n", dimStyle.Render("·"), ctx)
+			}
+		}
+
+	case "rm", "remove":
+		// ksw group rm <name>
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "Usage: ksw group rm <name>")
+			os.Exit(1)
+		}
+		groupName := os.Args[3]
+		if _, ok := cfg.Groups[groupName]; !ok {
+			fmt.Fprintf(os.Stderr, "%s Group '%s' not found.\n", warnStyle.Render("✗"), groupName)
+			os.Exit(1)
+		}
+		delete(cfg.Groups, groupName)
+		if err := saveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("%s Removed group %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName))
+
+	case "add-ctx":
+		// ksw group add-ctx <group> <ctx>
+		if len(os.Args) < 5 {
+			fmt.Fprintln(os.Stderr, "Usage: ksw group add-ctx <group> <ctx>")
+			os.Exit(1)
+		}
+		groupName := os.Args[3]
+		if _, ok := cfg.Groups[groupName]; !ok {
+			fmt.Fprintf(os.Stderr, "%s Group '%s' not found. Create it first with: ksw group add %s\n", warnStyle.Render("✗"), groupName, groupName)
+			os.Exit(1)
+		}
+		contexts, err := getContexts()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		ctx, err := resolveContext(os.Args[4], contexts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s %v\n", warnStyle.Render("✗"), err)
+			os.Exit(1)
+		}
+		for _, c := range cfg.Groups[groupName] {
+			if c == ctx {
+				fmt.Printf("%s Already in group %s: %s\n", dimStyle.Render("·"), aliasStyle.Render(groupName), ctx)
+				return
+			}
+		}
+		cfg.Groups[groupName] = append(cfg.Groups[groupName], ctx)
+		if err := saveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("%s Added to group %s: %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName), ctx)
+
+	case "rm-ctx":
+		// ksw group rm-ctx <group> <ctx>
+		if len(os.Args) < 5 {
+			fmt.Fprintln(os.Stderr, "Usage: ksw group rm-ctx <group> <ctx>")
+			os.Exit(1)
+		}
+		groupName := os.Args[3]
+		if _, ok := cfg.Groups[groupName]; !ok {
+			fmt.Fprintf(os.Stderr, "%s Group '%s' not found.\n", warnStyle.Render("✗"), groupName)
+			os.Exit(1)
+		}
+		target := os.Args[4]
+		newMembers := cfg.Groups[groupName][:0]
+		found := false
+		for _, c := range cfg.Groups[groupName] {
+			if c == target || strings.HasSuffix(c, "/"+target) || strings.Contains(c, target) {
+				found = true
+			} else {
+				newMembers = append(newMembers, c)
+			}
+		}
+		if !found {
+			fmt.Fprintf(os.Stderr, "%s Context '%s' not in group '%s'.\n", warnStyle.Render("✗"), target, groupName)
+			os.Exit(1)
+		}
+		cfg.Groups[groupName] = newMembers
+		if err := saveConfig(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("%s Removed from group %s: %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName), target)
+
+	case "use":
+		// ksw group use <name> — open TUI filtered to group
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "Usage: ksw group use <name>")
+			os.Exit(1)
+		}
+		groupName := os.Args[3]
+		members, ok := cfg.Groups[groupName]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "%s Group '%s' not found.\n", warnStyle.Render("✗"), groupName)
+			os.Exit(1)
+		}
+		if len(members) == 0 {
+			fmt.Fprintf(os.Stderr, "%s Group '%s' is empty.\n", warnStyle.Render("✗"), groupName)
+			os.Exit(1)
+		}
+		contexts, err := getContexts()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		current := getCurrentContext()
+		m := initialModel(contexts, current, cfg, groupName)
+		p := tea.NewProgram(m, tea.WithAltScreen())
+		result, err := p.Run()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		final := result.(model)
+		if final.chosen != "" && final.chosen != current {
+			recordHistory(&final.cfg, current, final.chosen)
+			if err := switchContext(final.chosen); err != nil {
+				fmt.Fprintf(os.Stderr, "Error switching to %s: %v\n", final.chosen, err)
+				os.Exit(1)
+			}
+			_ = saveConfig(final.cfg)
+			alias := final.aliasFor(final.chosen)
+			extra := ""
+			if alias != "" {
+				extra = " " + aliasStyle.Render("@"+alias)
+			}
+			fmt.Printf("%s Switched to %s%s\n", successStyle.Render("✔"), final.chosen, extra)
+		} else if final.chosen == current {
+			fmt.Printf("%s Already on %s\n", dimStyle.Render("·"), current)
+		}
+
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown group subcommand '%s'.\nUsage: ksw group <add|rm|ls|use|add-ctx|rm-ctx>\n", sub)
+		os.Exit(1)
 	}
 }
 
