@@ -1,8 +1,8 @@
 class Kswitch < Formula
   desc "Interactive Kubernetes context switcher with arrow-key navigation"
   homepage "https://github.com/YonierGomez/kswitch"
-  url "https://github.com/YonierGomez/kswitch/archive/refs/tags/v1.2.2.tar.gz"
-  sha256 "793c44ab67c1b89c668d4b8d38d2108b7ce106941368ccb82ed90fcfb510cfcd"
+  url "https://github.com/YonierGomez/kswitch/archive/refs/tags/v1.2.3.tar.gz"
+  sha256 "b51470bba58357ff2e6a71093162cf5946d4c7c8bda54ed1ab4d338383e443f0"
   license "MIT"
 
   depends_on "go" => :build
