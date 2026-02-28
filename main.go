@@ -500,17 +500,20 @@ func (m model) View() string {
 
 	// ── Current context ──
 	currentAlias := m.aliasFor(m.current)
-	currentLabel := m.current
+	currentName := m.current
 	if m.shortNames {
-		currentLabel = shortName(m.current)
+		currentName = shortName(m.current)
 	}
 	if currentAlias != "" {
-		currentLabel += " " + aliasStyle.Render("@"+currentAlias)
+		currentName += " " + aliasStyle.Render("@"+currentAlias)
 	}
+	var currentDisplay string
 	if m.shortNames {
-		currentLabel = dimStyle.Render("[short] ") + currentLabel
+		currentDisplay = dimStyle.Render("[short] ") + currentValueStyle.Render(currentName)
+	} else {
+		currentDisplay = currentValueStyle.Render(currentName)
 	}
-	b.WriteString("  " + currentLabelStyle.Render("  current ") + currentValueStyle.Render(currentLabel) + "\n")
+	b.WriteString("  " + currentLabelStyle.Render("  current ") + currentDisplay + "\n")
 	b.WriteString("\n")
 
 	// ── Search bar ──
@@ -622,6 +625,7 @@ Usage:
   ksw -                      Switch to previous context
   ksw @<alias>               Switch using an alias
   ksw history                Show recent context history
+  ksw history <n>            Switch to history entry by number
   ksw pin <name>             Pin a context to the top of the list
   ksw pin rm <name>          Unpin a context
   ksw pin ls                 List pinned contexts
@@ -638,7 +642,7 @@ Usage:
 
 Navigation:
   Type                Filter contexts with fuzzy search
-  ↑ / ↓              Move up / down
+  ↑ / ↓               Move up / down
   Home / End          Go to top / bottom
   PgUp / PgDn         Jump 10 items
   Backspace           Delete last character from filter
