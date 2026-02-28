@@ -1486,6 +1486,15 @@ func resolveContexts(name string, contexts []string) ([]string, error) {
 				matches = append(matches, ctx)
 			}
 		}
+		// If no matches and pattern doesn't start with *, try *pattern
+		if len(matches) == 0 && !strings.HasPrefix(name, "*") {
+			wrapped := "*" + name
+			for _, ctx := range contexts {
+				if globMatch(wrapped, ctx) {
+					matches = append(matches, ctx)
+				}
+			}
+		}
 		if len(matches) == 0 {
 			return nil, fmt.Errorf("no contexts match pattern '%s'", name)
 		}
@@ -1497,18 +1506,15 @@ func resolveContexts(name string, contexts []string) ([]string, error) {
 			return []string{ctx}, nil
 		}
 	}
-	// Suffix/substring match
+	// Suffix/substring match — return ALL matches (useful for group add)
 	var matches []string
 	for _, ctx := range contexts {
 		if strings.HasSuffix(ctx, "/"+name) || strings.Contains(ctx, name) {
 			matches = append(matches, ctx)
 		}
 	}
-	if len(matches) == 1 {
-		return []string{matches[0]}, nil
-	}
-	if len(matches) > 1 {
-		return nil, fmt.Errorf("ambiguous '%s', matches:\n  %s", name, strings.Join(matches, "\n  "))
+	if len(matches) >= 1 {
+		return matches, nil
 	}
 	return nil, fmt.Errorf("context '%s' not found", name)
 }
@@ -1617,30 +1623,35 @@ func handleGroup(cfg config) {
 		if len(resolved) == 0 {
 			fmt.Printf("%s Created empty group %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName))
 			fmt.Printf("  Add contexts with: %s\n", dimStyle.Render("ksw group add-ctx "+groupName+" <ctx>"))
+		} else if added == 0 {
+			fmt.Printf("%s Group %s — already up to date (%d contexts)\n", dimStyle.Render("·"), aliasStyle.Render(groupName), len(cfg.Groups[groupName]))
 		} else {
 			fmt.Printf("%s Group %s — added %d context(s)\n", successStyle.Render("✔"), aliasStyle.Render(groupName), added)
 			for _, ctx := range resolved {
-				fmt.Printf("  %s %s\n", dimStyle.Render("·"), ctx)
+				if !existingSet[ctx] {
+					fmt.Printf("  %s %s\n", dimStyle.Render("·"), ctx)
+				}
 			}
 		}
 
 	case "rm", "remove":
-		// ksw group rm <name>
+		// ksw group rm <name> [name2 ...]
 		if len(os.Args) < 4 {
-			fmt.Fprintln(os.Stderr, "Usage: ksw group rm <name>")
+			fmt.Fprintln(os.Stderr, "Usage: ksw group rm <name> [name2 ...]")
 			os.Exit(1)
 		}
-		groupName := os.Args[3]
-		if _, ok := cfg.Groups[groupName]; !ok {
-			fmt.Fprintf(os.Stderr, "%s Group '%s' not found.\n", warnStyle.Render("✗"), groupName)
-			os.Exit(1)
+		for _, groupName := range os.Args[3:] {
+			if _, ok := cfg.Groups[groupName]; !ok {
+				fmt.Fprintf(os.Stderr, "%s Group '%s' not found.\n", warnStyle.Render("✗"), groupName)
+				continue
+			}
+			delete(cfg.Groups, groupName)
+			fmt.Printf("%s Removed group %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName))
 		}
-		delete(cfg.Groups, groupName)
 		if err := saveConfig(cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("%s Removed group %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName))
 
 	case "add-ctx":
 		// ksw group add-ctx <group> <ctx>
