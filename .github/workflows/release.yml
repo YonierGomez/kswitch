@@ -53,6 +53,12 @@ jobs:
           body: |
             ## Install
 
+            ### One-line installer (macOS & Linux — easiest)
+            ```bash
+            curl -sL https://raw.githubusercontent.com/YonierGomez/kswitch/main/install.sh | bash
+            ```
+            Automatically detects your OS and architecture (amd64/arm64).
+
             ### Homebrew (macOS / Linux)
             ```bash
             brew tap YonierGomez/kswitch
