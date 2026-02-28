@@ -1167,6 +1167,12 @@ _ksw_aliases() {
   _describe 'aliases' aliases
 }
 
+_ksw_groups() {
+  local groups
+  groups=($(ksw group ls 2>/dev/null | awk '{print $1}'))
+  _describe 'groups' groups
+}
+
 _ksw() {
   local state
   _arguments \
@@ -1178,6 +1184,8 @@ _ksw() {
       local cmds
       cmds=(
         'history:Show recent context history'
+        'group:Manage context groups'
+        'pin:Pin contexts to the top of the list'
         'alias:Manage aliases'
         'rename:Rename a context'
         'completion:Print shell completion setup'
@@ -1200,6 +1208,23 @@ _ksw() {
             _ksw_aliases
           fi
           ;;
+        group)
+          if [[ ${#words[@]} -eq 3 ]]; then
+            local sub=(add rm ls use add-ctx rm-ctx)
+            _describe 'subcommands' sub
+          elif [[ ${#words[@]} -ge 4 ]]; then
+            case $words[3] in
+              use|rm|add-ctx|rm-ctx) _ksw_groups ;;
+            esac
+          fi
+          ;;
+        pin)
+          if [[ ${#words[@]} -eq 3 ]]; then
+            local sub=(ls rm use)
+            _describe 'subcommands' sub
+            _ksw_contexts
+          fi
+          ;;
         rename)
           _ksw_contexts ;;
       esac
@@ -1211,10 +1236,11 @@ compdef _ksw ksw
 `)
 	case "bash":
 		fmt.Print(`_ksw_complete() {
-  local cur prev
+  local cur prev pprev
   COMPREPLY=()
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
+  pprev="${COMP_WORDS[COMP_CWORD-2]}"
 
   local contexts
   contexts=$(kubectl config get-contexts -o name 2>/dev/null | tr '\n' ' ')
@@ -1222,16 +1248,28 @@ compdef _ksw ksw
   local aliases
   aliases=$(ksw alias ls 2>/dev/null | awk '{print $1}' | tr -d '@' | tr '\n' ' ')
 
+  local groups
+  groups=$(ksw group ls 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
+
   if [[ $COMP_CWORD -eq 1 ]]; then
-    local cmds="history alias rename completion - -l -v -h"
+    local cmds="history group pin alias rename completion - -l -v -h"
     COMPREPLY=( $(compgen -W "$cmds $contexts" -- "$cur") )
     return
   fi
 
   case "$prev" in
+    group)  COMPREPLY=( $(compgen -W "add rm ls use add-ctx rm-ctx" -- "$cur") ) ;;
+    pin)    COMPREPLY=( $(compgen -W "ls rm use $contexts" -- "$cur") ) ;;
     alias)  COMPREPLY=( $(compgen -W "ls rm $aliases" -- "$cur") ) ;;
-    rm)     COMPREPLY=( $(compgen -W "$aliases" -- "$cur") ) ;;
-    rename) COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
+    use)    [[ "$pprev" == "group" ]] && COMPREPLY=( $(compgen -W "$groups" -- "$cur") ) ;;
+    rm)
+      case "$pprev" in
+        alias) COMPREPLY=( $(compgen -W "$aliases" -- "$cur") ) ;;
+        group) COMPREPLY=( $(compgen -W "$groups" -- "$cur") ) ;;
+        pin)   COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
+      esac
+      ;;
+    rename|add-ctx|rm-ctx) COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
     *)      COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
   esac
 }
