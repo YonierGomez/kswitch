@@ -183,6 +183,7 @@ ksw group add payments eks-payments-dev eks-payments-qa eks-payments-pdn
 # ✔ Group payments — added 3 context(s)
 
 # Use glob patterns to add all matching contexts at once
+# Note: quote the pattern to prevent shell expansion
 ksw group add payments "eks-payments*"
 # ✔ Group payments — added 3 context(s)
 #   · arn:.../eks-payments-dev

@@ -674,7 +674,7 @@ Usage:
   ksw @<alias>               Switch using an alias
   ksw history                Show recent context history
   ksw history <n>            Switch to history entry by number
-  ksw group add <name> [ctx] Create a group and add contexts to it
+  ksw group add <name> [ctx] Create a group (use quotes for glob: "eks-sufi*")
   ksw group rm <name>        Remove a group
   ksw group ls               List all groups
   ksw group use <name>       Open TUI filtered to a group
