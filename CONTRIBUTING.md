@@ -45,7 +45,7 @@ Complete reference for building, releasing, and maintaining the project.
 The version is defined as a constant at the top of `main.go`:
 
 ```go
-const version = "1.1.3"
+const version = "1.2.3"
 ```
 
 ---
@@ -93,18 +93,18 @@ Open PR at: `https://github.com/YonierGomez/kswitch/pull/new/<branch-name>`
 After merging, bump `version` in `main.go`:
 
 ```go
-const version = "1.1.4"  // increment patch/minor/major as needed
+const version = "1.2.4"  // increment patch/minor/major as needed
 ```
 
 Create a PR for the bump:
 
 ```bash
 git checkout main && git pull origin main
-git checkout -b bump/v1.1.4
-# edit main.go: const version = "1.1.4"
+git checkout -b bump/v1.2.4
+# edit main.go: const version = "1.2.4"
 git add main.go
-git commit -m "bump: v1.1.4 - short description"
-git push origin bump/v1.1.4
+git commit -m "bump: v1.2.4 - short description"
+git push origin bump/v1.2.4
 # open PR, merge it
 ```
 
@@ -114,8 +114,8 @@ After the bump PR is merged:
 
 ```bash
 git checkout main && git pull origin main
-git tag v1.1.4
-git push origin v1.1.4
+git tag v1.2.4
+git push origin v1.2.4
 ```
 
 > This triggers the GitHub Actions release workflow automatically.
@@ -133,7 +133,7 @@ The workflow builds 4 binaries + tarballs + checksums.txt and creates a GitHub R
 After the release is published, get the new sha256:
 
 ```bash
-curl -sL https://github.com/YonierGomez/kswitch/archive/refs/tags/v1.1.4.tar.gz | shasum -a 256
+curl -sL https://github.com/YonierGomez/kswitch/archive/refs/tags/v1.2.4.tar.gz | shasum -a 256
 ```
 
 Then update the tap formula:
@@ -144,7 +144,7 @@ cd /opt/homebrew/Library/Taps/yoniergomez/homebrew-kswitch
 #   url  → new tag URL
 #   sha256 → new hash
 git add Formula/kswitch.rb
-git commit -m "fix: update formula for v1.1.4"
+git commit -m "fix: update formula for v1.2.4"
 git push origin HEAD
 ```
 
@@ -153,7 +153,7 @@ Also update the local copy in this repo:
 ```bash
 cp /opt/homebrew/Library/Taps/yoniergomez/homebrew-kswitch/Formula/kswitch.rb Formula/kswitch.rb
 git add Formula/kswitch.rb
-git commit -m "chore: sync Formula/kswitch.rb for v1.1.4"
+git commit -m "chore: sync Formula/kswitch.rb for v1.2.4"
 # include in a PR
 ```
 
@@ -172,7 +172,7 @@ ksw -v  # should show new version
 |------|---------|---------|
 | Feature | `feat/<description>` | `feat/copy-buttons` |
 | Bug fix | `fix/<description>` | `fix/short-mode-color` |
-| Version bump | `bump/v<version>` | `bump/v1.1.4` |
+| Version bump | `bump/v<version>` | `bump/v1.2.4` |
 | Docs | `docs/<description>` | `docs/linux-support` |
 | Chore | `chore/<description>` | `chore/sync-formula` |
 
