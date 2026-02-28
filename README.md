@@ -182,7 +182,12 @@ Organize contexts into named groups and open the TUI filtered to only those cont
 ksw group add payments eks-payments-dev eks-payments-qa eks-payments-pdn
 # ✔ Group payments — added 3 context(s)
 
-# Use glob patterns to add all matching contexts at once
+# Use substring match (simplest — matches anywhere in the name)
+ksw group add outposts outposts
+# ✔ Group outposts — added 9 context(s)
+
+# Use glob patterns — quote to prevent shell expansion
+# pattern*  → auto-wraps to *pattern* (matches anywhere)
 ksw group add payments "eks-payments*"
 # ✔ Group payments — added 3 context(s)
 #   · arn:.../eks-payments-dev
