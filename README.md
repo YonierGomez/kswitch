@@ -71,7 +71,7 @@ ksw group rm <name>          # Remove a group
 ksw group ls                 # List all groups with their members
 ksw group use <name>         # Open TUI filtered to a group
 ksw group add-ctx <g> <ctx>  # Add a context to an existing group
-ksw group rm-ctx <g> <ctx>   # Remove a context from a group
+ksw group rmi <g> <ctx>   # Remove a context from a group
 ksw pin <name>               # Pin a context to the top of the list
 ksw pin rm <name>            # Unpin a context
 ksw pin ls                   # List pinned contexts
@@ -209,7 +209,7 @@ ksw group ls
 ksw group add-ctx payments eks-payments-staging
 
 # Remove a context from a group
-ksw group rm-ctx payments eks-payments-staging
+ksw group rmi payments eks-payments-staging
 
 # Remove a group entirely
 ksw group rm payments

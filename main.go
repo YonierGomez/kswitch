@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const version = "1.2.1"
+const version = "1.2.2"
 
 // ── Styles ─────────────────────────────────────────────
 var (
@@ -679,7 +679,7 @@ Usage:
   ksw group ls               List all groups
   ksw group use <name>       Open TUI filtered to a group
   ksw group add-ctx <g> <ctx> Add a context to an existing group
-  ksw group rm-ctx <g> <ctx>  Remove a context from a group
+  ksw group rmi <g> <ctx>  Remove a context from a group
   ksw pin <name>             Pin a context to the top of the list
   ksw pin rm <name>          Unpin a context
   ksw pin ls                 List pinned contexts
@@ -1210,11 +1210,11 @@ _ksw() {
           ;;
         group)
           if [[ ${#words[@]} -eq 3 ]]; then
-            local sub=(add rm ls use add-ctx rm-ctx)
+            local sub=(add rm ls use add-ctx rmi)
             _describe 'subcommands' sub
           elif [[ ${#words[@]} -ge 4 ]]; then
             case $words[3] in
-              use|rm|add-ctx|rm-ctx) _ksw_groups ;;
+              use|rm|add-ctx|rmi) _ksw_groups ;;
             esac
           fi
           ;;
@@ -1258,7 +1258,7 @@ compdef _ksw ksw
   fi
 
   case "$prev" in
-    group)  COMPREPLY=( $(compgen -W "add rm ls use add-ctx rm-ctx" -- "$cur") ) ;;
+    group)  COMPREPLY=( $(compgen -W "add rm ls use add-ctx rmi" -- "$cur") ) ;;
     pin)    COMPREPLY=( $(compgen -W "ls rm use $contexts" -- "$cur") ) ;;
     alias)  COMPREPLY=( $(compgen -W "ls rm $aliases" -- "$cur") ) ;;
     use)    [[ "$pprev" == "group" ]] && COMPREPLY=( $(compgen -W "$groups" -- "$cur") ) ;;
@@ -1269,7 +1269,7 @@ compdef _ksw ksw
         pin)   COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
       esac
       ;;
-    rename|add-ctx|rm-ctx) COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
+    rename|add-ctx|rmi) COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
     *)      COMPREPLY=( $(compgen -W "$contexts" -- "$cur") ) ;;
   esac
 }
@@ -1687,10 +1687,10 @@ func handleGroup(cfg config) {
 		}
 		fmt.Printf("%s Added to group %s: %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName), ctx)
 
-	case "rm-ctx":
-		// ksw group rm-ctx <group> <ctx>
+	case "rmi":
+		// ksw group rmi <group> <ctx> [ctx2 ...]
 		if len(os.Args) < 5 {
-			fmt.Fprintln(os.Stderr, "Usage: ksw group rm-ctx <group> <ctx>")
+			fmt.Fprintln(os.Stderr, "Usage: ksw group rmi <group> <ctx> [ctx2 ...]")
 			os.Exit(1)
 		}
 		groupName := os.Args[3]
@@ -1698,26 +1698,58 @@ func handleGroup(cfg config) {
 			fmt.Fprintf(os.Stderr, "%s Group '%s' not found.\n", warnStyle.Render("✗"), groupName)
 			os.Exit(1)
 		}
-		target := os.Args[4]
-		newMembers := cfg.Groups[groupName][:0]
-		found := false
-		for _, c := range cfg.Groups[groupName] {
-			if c == target || strings.HasSuffix(c, "/"+target) || strings.Contains(c, target) {
-				found = true
+		// Build set of members to remove (supports substring and glob)
+		toRemove := make(map[string]bool)
+		for _, pattern := range os.Args[4:] {
+			matched := false
+			if strings.ContainsAny(pattern, "*?") {
+				// Glob match
+				for _, c := range cfg.Groups[groupName] {
+					if globMatch(pattern, c) {
+						toRemove[c] = true
+						matched = true
+					}
+				}
+				// Auto-wrap if no match
+				if !matched && !strings.HasPrefix(pattern, "*") {
+					wrapped := "*" + pattern
+					for _, c := range cfg.Groups[groupName] {
+						if globMatch(wrapped, c) {
+							toRemove[c] = true
+							matched = true
+						}
+					}
+				}
 			} else {
-				newMembers = append(newMembers, c)
+				// Exact, suffix or substring match
+				for _, c := range cfg.Groups[groupName] {
+					if c == pattern || strings.HasSuffix(c, "/"+pattern) || strings.Contains(c, pattern) {
+						toRemove[c] = true
+						matched = true
+					}
+				}
+			}
+			if !matched {
+				fmt.Fprintf(os.Stderr, "%s '%s' not found in group '%s'.\n", warnStyle.Render("✗"), pattern, groupName)
 			}
 		}
-		if !found {
-			fmt.Fprintf(os.Stderr, "%s Context '%s' not in group '%s'.\n", warnStyle.Render("✗"), target, groupName)
+		if len(toRemove) == 0 {
 			os.Exit(1)
+		}
+		var newMembers []string
+		for _, c := range cfg.Groups[groupName] {
+			if !toRemove[c] {
+				newMembers = append(newMembers, c)
+			}
 		}
 		cfg.Groups[groupName] = newMembers
 		if err := saveConfig(cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("%s Removed from group %s: %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName), target)
+		for c := range toRemove {
+			fmt.Printf("%s Removed from group %s: %s\n", successStyle.Render("✔"), aliasStyle.Render(groupName), c)
+		}
 
 	case "use":
 		// ksw group use <name> — open TUI filtered to group
@@ -1767,7 +1799,7 @@ func handleGroup(cfg config) {
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown group subcommand '%s'.\nUsage: ksw group <add|rm|ls|use|add-ctx|rm-ctx>\n", sub)
+		fmt.Fprintf(os.Stderr, "Unknown group subcommand '%s'.\nUsage: ksw group <add|rm|ls|use|add-ctx|rmi>\n", sub)
 		os.Exit(1)
 	}
 }
