@@ -243,8 +243,9 @@ type model struct {
 	terminalHeight int
 	terminalWidth  int
 	quitting       bool
-	shortNames     bool
-	activeGroup    string // "" = all contexts
+	shortNames      bool
+	activeGroup     string // "" = all contexts
+	showPinnedOnly  bool   // Ctrl+F toggle
 }
 
 // shortName extracts the last segment after '/' from a context name
@@ -255,15 +256,16 @@ func shortName(ctx string) string {
 	return ctx
 }
 
-func initialModel(contexts []string, current string, cfg config, activeGroup string) model {
+func initialModel(contexts []string, current string, cfg config, activeGroup string, pinnedOnly bool) model {
 	m := model{
-		contexts:    contexts,
-		current:     current,
-		cfg:         cfg,
+		contexts:       contexts,
+		current:        current,
+		cfg:            cfg,
 		terminalHeight: 24,
 		terminalWidth:  80,
-		shortNames:  cfg.ShortNames,
-		activeGroup: activeGroup,
+		shortNames:     cfg.ShortNames,
+		activeGroup:    activeGroup,
+		showPinnedOnly: pinnedOnly,
 	}
 	m.resetFilter()
 	for i, idx := range m.filtered {
@@ -329,9 +331,13 @@ func (m *model) resetFilter() {
 	gs := m.groupSet()
 	var indices []int
 	for i, ctx := range m.contexts {
-		if gs == nil || gs[ctx] {
-			indices = append(indices, i)
+		if gs != nil && !gs[ctx] {
+			continue
 		}
+		if m.showPinnedOnly && !m.isPinned(ctx) {
+			continue
+		}
+		indices = append(indices, i)
 	}
 	m.filtered = m.sortedByPins(indices)
 	m.scrollOffset = 0
@@ -355,6 +361,9 @@ func (m *model) applyFilter() {
 	var results []scored
 	for i, ctx := range m.contexts {
 		if gs != nil && !gs[ctx] {
+			continue
+		}
+		if m.showPinnedOnly && !m.isPinned(ctx) {
 			continue
 		}
 		// Match against context name
@@ -496,6 +505,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.shortNames = !m.shortNames
 			m.cfg.ShortNames = m.shortNames
 			_ = saveConfig(m.cfg)
+		case tea.KeyCtrlF:
+			// Toggle pinned-only filter
+			m.showPinnedOnly = !m.showPinnedOnly
+			m.search = ""
+			m.resetFilter()
+			m.cursor = 0
+			m.scrollOffset = 0
 		case tea.KeyEnter:
 			if len(m.filtered) > 0 {
 				m.chosen = m.contexts[m.filtered[m.cursor]]
@@ -539,11 +555,13 @@ func (m model) View() string {
 	} else {
 		currentDisplay = currentValueStyle.Render(currentName)
 	}
-	groupLabel := ""
+	filterLabel := ""
 	if m.activeGroup != "" {
-		groupLabel = "  " + pinItemStyle.Render("["+m.activeGroup+"]")
+		filterLabel = "  " + pinItemStyle.Render("["+m.activeGroup+"]")
+	} else if m.showPinnedOnly {
+		filterLabel = "  " + pinItemStyle.Render("[★ pinned]")
 	}
-	b.WriteString("  " + currentLabelStyle.Render("  current ") + currentDisplay + groupLabel + "\n")
+	b.WriteString("  " + currentLabelStyle.Render("  current ") + currentDisplay + filterLabel + "\n")
 	b.WriteString("\n")
 
 	// ── Search bar ──
@@ -625,11 +643,11 @@ func (m model) View() string {
 	counter := counterStyle.Render(fmt.Sprintf("  %d/%d", len(m.filtered), len(m.contexts)))
 	var help string
 	if m.terminalWidth >= 120 {
-		help = "  ↑↓ navigate · enter select · ctrl+p pin/unpin · ctrl+t jump-pin · ctrl+h short · esc clear · ctrl+c quit"
+		help = "  ↑↓ navigate · enter select · ctrl+p pin/unpin · ctrl+t jump-pin · ctrl+f pinned · ctrl+h short · esc · ctrl+c quit"
 	} else if m.terminalWidth >= 80 {
-		help = "  ↑↓ · enter select · ^p pin · ^t pins · ^h short · esc · ^c quit"
+		help = "  ↑↓ · enter · ^p pin · ^t pins · ^f pinned · ^h short · esc · ^c quit"
 	} else {
-		help = "  ↑↓ enter · ^p pin · ^h short · esc ^c"
+		help = "  ↑↓ enter · ^p pin · ^f pinned · ^h short · esc ^c"
 	}
 	b.WriteString("  " + counter + helpStyle.Render(help) + "\n")
 
@@ -665,6 +683,7 @@ Usage:
   ksw pin <name>             Pin a context to the top of the list
   ksw pin rm <name>          Unpin a context
   ksw pin ls                 List pinned contexts
+  ksw pin use                Open TUI filtered to pinned contexts only
   ksw rename <old> <new>     Rename a context in kubeconfig
   ksw alias <name> <context> Create alias for a context
   ksw alias rm <name>        Remove an alias
@@ -829,6 +848,7 @@ Config stored in ~/.ksw.json
 			handleGroup(cfg)
 			return
 
+
 		case "alias":
 			handleAlias(cfg)
 			return
@@ -937,7 +957,7 @@ Config stored in ~/.ksw.json
 	}
 
 	current := getCurrentContext()
-	m := initialModel(contexts, current, cfg, "")
+	m := initialModel(contexts, current, cfg, "", false)
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	result, err := p.Run()
@@ -1247,6 +1267,43 @@ func handlePin(cfg config) {
 			fmt.Printf("  %s %s\n", pinTag, pinItemStyle.Render(p))
 		}
 
+	case "use":
+		// ksw pin use — open TUI filtered to pinned contexts
+		if len(cfg.Pins) == 0 {
+			fmt.Fprintf(os.Stderr, "%s No pinned contexts. Use 'ksw pin <name>' to pin first.\n", warnStyle.Render("✗"))
+			os.Exit(1)
+		}
+		contexts, err := getContexts()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		current := getCurrentContext()
+		m := initialModel(contexts, current, cfg, "", true)
+		p := tea.NewProgram(m, tea.WithAltScreen())
+		result, err := p.Run()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		final := result.(model)
+		if final.chosen != "" && final.chosen != current {
+			recordHistory(&final.cfg, current, final.chosen)
+			if err := switchContext(final.chosen); err != nil {
+				fmt.Fprintf(os.Stderr, "Error switching to %s: %v\n", final.chosen, err)
+				os.Exit(1)
+			}
+			_ = saveConfig(final.cfg)
+			alias := final.aliasFor(final.chosen)
+			extra := ""
+			if alias != "" {
+				extra = " " + aliasStyle.Render("@"+alias)
+			}
+			fmt.Printf("%s Switched to %s%s\n", successStyle.Render("✔"), final.chosen, extra)
+		} else if final.chosen == current {
+			fmt.Printf("%s Already on %s\n", dimStyle.Render("·"), current)
+		}
+
 	case "rm", "remove", "unpin":
 		if len(os.Args) < 4 {
 			fmt.Fprintln(os.Stderr, "Usage: ksw pin rm <name>")
@@ -1336,12 +1393,73 @@ func handlePin(cfg config) {
 }
 
 // ── handleGroup ────────────────────────────────────────
-func resolveContext(name string, contexts []string) (string, error) {
-	for _, ctx := range contexts {
-		if ctx == name {
-			return ctx, nil
+
+// globMatch returns true if str matches a simple glob pattern (* and ?)
+// matching is done against the full context name and also the short name (after last /)
+func globMatch(pattern, str string) bool {
+	// match against full name
+	if matchGlob(pattern, str) {
+		return true
+	}
+	// match against short name (after last /)
+	short := str
+	if idx := strings.LastIndex(str, "/"); idx >= 0 {
+		short = str[idx+1:]
+	}
+	return matchGlob(pattern, short)
+}
+
+// matchGlob is a simple glob matcher supporting * and ?
+func matchGlob(pattern, str string) bool {
+	p, s := 0, 0
+	starIdx := -1
+	match := 0
+	for s < len(str) {
+		if p < len(pattern) && (pattern[p] == '?' || pattern[p] == str[s]) {
+			p++
+			s++
+		} else if p < len(pattern) && pattern[p] == '*' {
+			starIdx = p
+			match = s
+			p++
+		} else if starIdx != -1 {
+			p = starIdx + 1
+			match++
+			s = match
+		} else {
+			return false
 		}
 	}
+	for p < len(pattern) && pattern[p] == '*' {
+		p++
+	}
+	return p == len(pattern)
+}
+
+// resolveContexts resolves a name/pattern to one or more context names.
+// If the pattern contains * or ?, it returns all matching contexts.
+// Otherwise it returns exactly one context (or error).
+func resolveContexts(name string, contexts []string) ([]string, error) {
+	// Glob pattern
+	if strings.ContainsAny(name, "*?") {
+		var matches []string
+		for _, ctx := range contexts {
+			if globMatch(name, ctx) {
+				matches = append(matches, ctx)
+			}
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("no contexts match pattern '%s'", name)
+		}
+		return matches, nil
+	}
+	// Exact match
+	for _, ctx := range contexts {
+		if ctx == name {
+			return []string{ctx}, nil
+		}
+	}
+	// Suffix/substring match
 	var matches []string
 	for _, ctx := range contexts {
 		if strings.HasSuffix(ctx, "/"+name) || strings.Contains(ctx, name) {
@@ -1349,12 +1467,23 @@ func resolveContext(name string, contexts []string) (string, error) {
 		}
 	}
 	if len(matches) == 1 {
-		return matches[0], nil
+		return []string{matches[0]}, nil
 	}
 	if len(matches) > 1 {
-		return "", fmt.Errorf("ambiguous '%s', matches:\n  %s", name, strings.Join(matches, "\n  "))
+		return nil, fmt.Errorf("ambiguous '%s', matches:\n  %s", name, strings.Join(matches, "\n  "))
 	}
-	return "", fmt.Errorf("context '%s' not found", name)
+	return nil, fmt.Errorf("context '%s' not found", name)
+}
+
+func resolveContext(name string, contexts []string) (string, error) {
+	results, err := resolveContexts(name, contexts)
+	if err != nil {
+		return "", err
+	}
+	if len(results) > 1 {
+		return "", fmt.Errorf("ambiguous '%s', matches:\n  %s", name, strings.Join(results, "\n  "))
+	}
+	return results[0], nil
 }
 
 func handleGroup(cfg config) {
@@ -1407,24 +1536,26 @@ func handleGroup(cfg config) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		// Resolve any provided contexts
+		// Resolve any provided contexts (supports glob patterns like eks-sufi*)
 		var resolved []string
 		for _, arg := range os.Args[4:] {
-			ctx, err := resolveContext(arg, contexts)
+			ctxs, err := resolveContexts(arg, contexts)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s %v\n", warnStyle.Render("✗"), err)
 				os.Exit(1)
 			}
-			// Avoid duplicates
-			found := false
-			for _, r := range resolved {
-				if r == ctx {
-					found = true
-					break
+			for _, ctx := range ctxs {
+				// Avoid duplicates
+				found := false
+				for _, r := range resolved {
+					if r == ctx {
+						found = true
+						break
+					}
 				}
-			}
-			if !found {
-				resolved = append(resolved, ctx)
+				if !found {
+					resolved = append(resolved, ctx)
+				}
 			}
 		}
 		// Merge with existing group members
@@ -1561,7 +1692,7 @@ func handleGroup(cfg config) {
 			os.Exit(1)
 		}
 		current := getCurrentContext()
-		m := initialModel(contexts, current, cfg, groupName)
+		m := initialModel(contexts, current, cfg, groupName, false)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		result, err := p.Run()
 		if err != nil {

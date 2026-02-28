@@ -75,6 +75,7 @@ ksw group rm-ctx <g> <ctx>   # Remove a context from a group
 ksw pin <name>               # Pin a context to the top of the list
 ksw pin rm <name>            # Unpin a context
 ksw pin ls                   # List pinned contexts
+ksw pin use                  # Open TUI filtered to pinned contexts only
 ksw rename <old> <new>       # Rename a context in kubeconfig
 ksw alias <name> <context>   # Create alias for a context
 ksw alias rm <name>          # Remove an alias
@@ -99,6 +100,7 @@ ksw -h                       # Help
 | `Enter`      | Switch to highlighted context       |
 | `Ctrl+P`     | Pin / unpin current context (★)     |
 | `Ctrl+T`     | Jump to first pinned context        |
+| `Ctrl+F`     | Toggle pinned-only filter `[★ pinned]` |
 | `Ctrl+H`     | Toggle short name view (persisted)  |
 | `Esc`        | Clear filter / Quit                 |
 | `Ctrl+C`     | Quit                                |
@@ -176,9 +178,16 @@ ksw history 5
 Organize contexts into named groups and open the TUI filtered to only those contexts:
 
 ```bash
-# Create a group with multiple contexts (short names work)
+# Create a group with multiple contexts (short names or glob patterns)
 ksw group add payments eks-payments-dev eks-payments-qa eks-payments-pdn
 # ✔ Group payments — added 3 context(s)
+
+# Use glob patterns to add all matching contexts at once
+ksw group add payments "eks-payments*"
+# ✔ Group payments — added 3 context(s)
+#   · arn:.../eks-payments-dev
+#   · arn:.../eks-payments-qa
+#   · arn:.../eks-payments-pdn
 
 # Open TUI showing only the payments group
 ksw group use payments
