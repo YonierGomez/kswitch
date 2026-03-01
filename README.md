@@ -1,10 +1,80 @@
 # ksw
 
-Interactive Kubernetes context switcher for your terminal. Built in Go.
+**AI-powered** Kubernetes context switcher for your terminal. Built in Go.
 
-Navigate with arrow keys, fuzzy search by typing, pin your favorites, and switch contexts in milliseconds. Single binary, no runtime dependencies.
+Switch contexts with natural language, manage groups, pins and aliases — all by just telling the AI what you need. Or use the blazing-fast interactive TUI with fuzzy search. Single binary, no runtime dependencies.
 
 > Available for **macOS** and **Linux** (amd64 & arm64). Named `ksw` to avoid conflict with macOS built-in `kswitch` (Kerberos).
+
+## 🤖 AI — Natural Language Context Management
+
+Talk to your clusters. `ksw ai` understands what you mean and executes it.
+
+```bash
+# Switch contexts with natural language
+ksw ai "switch to payments dev"
+# ✔ Switched to arn:aws:eks:us-east-1:111122223333:cluster/eks-payments-dev
+
+# Create groups, pins, aliases — just ask
+ksw ai "create a group called backend with payments and orders dev"
+# ✔ Group 'backend' created (2 contexts)
+
+ksw ai "pin nequi dev"
+# ✔ Pinned ★ arn:.../eks-nequi-dev
+
+# Ask questions about your setup
+ksw ai "list my pins and groups as a table"
+# (AI builds a formatted table from your current state)
+
+# Conversational memory — it remembers context
+ksw ai "switch to sufi qa"
+ksw ai "now the same but in dev"
+# ✔ Switched to arn:.../eks-sufi-dev
+
+ksw ai "go back to the previous one"
+# ✔ Switched to arn:.../eks-sufi-qa
+
+# Multi-action — multiple tasks in one prompt
+ksw ai "list my pins and groups"
+# (executes both commands in a single call)
+
+# Delete, rename, explore — anything you can do manually
+ksw ai "delete the sufi group"
+ksw ai "rename payments-dev to pay-dev"
+ksw ai "what have I done so far?"
+# (shows your recent history from conversational memory)
+```
+
+### Supported AI Providers
+
+| Provider | Models | Auth |
+|----------|--------|------|
+| OpenAI | gpt-4o, gpt-4o-mini, etc. | API Key |
+| Claude (Anthropic) | claude-sonnet-4-20250514, etc. | API Key |
+| Gemini (Google) | gemini-2.0-flash, etc. | API Key |
+| AWS Bedrock | Any Bedrock model (Claude, Llama, etc.) | AWS Profile, Access Keys, or Env vars |
+
+### AI Configuration
+
+```bash
+# Interactive setup wizard
+ksw ai config
+# → Select provider (openai / claude / gemini / bedrock)
+# → Choose model
+# → Enter credentials
+# → Done!
+```
+
+### AI Features
+
+- **Natural language** — switch, create, delete, list, rename — just describe what you want
+- **Conversational memory** — remembers your last 10 interactions, understands "the previous one", "same but in qa"
+- **Multi-action** — execute multiple tasks in a single prompt
+- **Smart formatting** — ask for tables, summaries, or any custom format
+- **Response cache** — 30s TTL avoids duplicate LLM calls for repeated queries
+- **Full state awareness** — AI knows your current context, groups, pins, aliases, and history
+- **Pre-filtering** — extracts keywords locally to narrow candidates before calling the LLM
+- **Retry with backoff** — handles rate limits (429) and server errors gracefully
 
 ## Install
 
@@ -60,26 +130,41 @@ go install github.com/YonierGomez/kswitch@latest
 ## Usage
 
 ```bash
+# ── AI (natural language) ──
+ksw ai "<query>"             # AI-powered: switch, create, list, delete — anything
+ksw ai config                # Configure AI provider and credentials
+
+# ── Interactive TUI ──
 ksw                          # Interactive selector (fuzzy search)
 ksw <name>                   # Switch directly (short name ok: ksw payments-dev)
 ksw -                        # Switch to previous context
 ksw @<alias>                 # Switch using alias
+
+# ── History ──
 ksw history                  # Show recent context history
 ksw history <n>              # Switch to history entry by number
+
+# ── Groups ──
 ksw group add <name> [ctx]   # Create a group and add contexts to it
 ksw group rm <name>          # Remove a group
 ksw group ls                 # List all groups with their members
 ksw group use <name>         # Open TUI filtered to a group
 ksw group add-ctx <g> <ctx>  # Add a context to an existing group
-ksw group rmi <g> <ctx>   # Remove a context from a group
+ksw group rmi <g> <ctx>      # Remove a context from a group
+
+# ── Pins ──
 ksw pin <name>               # Pin a context to the top of the list
 ksw pin rm <name>            # Unpin a context
 ksw pin ls                   # List pinned contexts
 ksw pin use                  # Open TUI filtered to pinned contexts only
-ksw rename <old> <new>       # Rename a context in kubeconfig
+
+# ── Aliases & Rename ──
 ksw alias <name> <context>   # Create alias for a context
 ksw alias rm <name>          # Remove an alias
 ksw alias ls                 # List all aliases
+ksw rename <old> <new>       # Rename a context in kubeconfig
+
+# ── Other ──
 ksw completion install       # Auto-install shell completion (~/.zshrc or ~/.bashrc)
 ksw completion zsh           # Print zsh setup line
 ksw completion bash          # Print bash setup line
@@ -261,13 +346,29 @@ All settings are stored in `~/.ksw.json`:
     "arn:aws:eks:us-east-1:111122223333:cluster/eks-payments-dev",
     "arn:aws:eks:us-east-1:444455556666:cluster/eks-payments-qa"
   ],
-  "previous": "arn:aws:eks:us-east-1:444455556666:cluster/eks-payments-qa"
+  "previous": "arn:aws:eks:us-east-1:444455556666:cluster/eks-payments-qa",
+  "ai": {
+    "provider": "bedrock",
+    "model": "us.anthropic.claude-sonnet-4-6",
+    "region": "us-east-1",
+    "auth_method": "profile",
+    "profile": "my-aws-profile"
+  },
+  "ai_memory": [
+    {
+      "query": "switch to payments dev",
+      "action": "switch",
+      "result": "eks-payments-dev",
+      "time": 1709312400
+    }
+  ]
 }
 ```
 
 ## Requirements
 
 - `kubectl` installed and configured
+- For `ksw ai` with AWS Bedrock: `aws` CLI installed and configured
 
 ## License
 

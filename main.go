@@ -85,6 +85,8 @@ type config struct {
 	Pins       []string            `json:"pins,omitempty"`
 	ShortNames bool                `json:"short_names,omitempty"`
 	Groups     map[string][]string `json:"groups,omitempty"`
+	AI         aiConfig            `json:"ai,omitempty"`
+	AIMemory   []aiMemoryEntry     `json:"ai_memory,omitempty"`
 }
 
 const maxHistory = 10
@@ -691,6 +693,8 @@ Usage:
   ksw completion install     Auto-install completion in ~/.zshrc or ~/.bashrc
   ksw completion zsh         Print zsh setup line
   ksw completion bash        Print bash setup line
+  ksw ai "<query>"           Switch context using natural language (AI)
+  ksw ai config              Configure AI provider (openai, claude, gemini)
   ksw -l                     List contexts (non-interactive)
   ksw -h                     Show this help
   ksw -v                     Show version
@@ -851,6 +855,10 @@ Config stored in ~/.ksw.json
 
 		case "alias":
 			handleAlias(cfg)
+			return
+
+		case "ai":
+			handleAI(cfg)
 			return
 
 		default:
