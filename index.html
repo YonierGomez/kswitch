@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ksw – Kubernetes Context Switcher</title>
-  <meta name="description" content="ksw is a blazing-fast interactive Kubernetes context switcher. Fuzzy search, pins, aliases, history and short-name switching — single binary, no dependencies." />
-  <meta name="keywords" content="kubernetes, context switcher, kubectl, kubeconfig, k8s, terminal, TUI, CLI, kswitch" />
+  <title>ksw – AI-Powered Kubernetes Context Switcher</title>
+  <meta name="description" content="ksw is an AI-powered interactive Kubernetes context switcher. Natural language switching, fuzzy search, pins, aliases, groups, conversational memory — single binary, no dependencies." />
+  <meta name="keywords" content="kubernetes, context switcher, kubectl, kubeconfig, k8s, terminal, TUI, CLI, kswitch, AI, natural language, LLM, OpenAI, Claude, Gemini, Bedrock" />
   <meta name="author" content="Yonier Gómez" />
 
   <!-- Favicon SVG inline -->
@@ -14,14 +14,14 @@
   <!-- Open Graph / Social -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://yoniergomez.github.io/kswitch/" />
-  <meta property="og:title" content="ksw – Kubernetes Context Switcher" />
-  <meta property="og:description" content="Blazing-fast interactive TUI for switching Kubernetes contexts. Fuzzy search, pins, aliases, history — single binary." />
+  <meta property="og:title" content="ksw – AI-Powered Kubernetes Context Switcher" />
+  <meta property="og:description" content="AI-powered interactive TUI for switching Kubernetes contexts. Natural language, fuzzy search, pins, aliases, groups — single binary." />
   <meta property="og:image" content="https://yoniergomez.github.io/kswitch/og-image.png" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="ksw – Kubernetes Context Switcher" />
-  <meta name="twitter:description" content="Blazing-fast interactive TUI for switching Kubernetes contexts. Fuzzy search, pins, aliases, history — single binary." />
+  <meta name="twitter:title" content="ksw – AI-Powered Kubernetes Context Switcher" />
+  <meta name="twitter:description" content="AI-powered interactive TUI for switching Kubernetes contexts. Natural language, fuzzy search, pins, aliases, groups — single binary." />
 
   <!-- Canonical -->
   <link rel="canonical" href="https://yoniergomez.github.io/kswitch/" />
@@ -33,7 +33,7 @@
     "@type": "SoftwareApplication",
     "name": "ksw",
     "alternateName": "kswitch",
-    "description": "Blazing-fast interactive Kubernetes context switcher with fuzzy search, pins, aliases and history.",
+    "description": "AI-powered interactive Kubernetes context switcher with natural language, fuzzy search, pins, aliases, groups and history.",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -489,6 +489,7 @@
 <nav>
   <div class="nav-logo">⎈ <span>ksw</span></div>
   <ul class="nav-links">
+    <li><a href="#ai">AI</a></li>
     <li><a href="#features">Features</a></li>
     <li><a href="#install">Install</a></li>
     <li><a href="#usage">Usage</a></li>
@@ -499,32 +500,34 @@
 
 <!-- HERO -->
 <section class="hero">
-  <div class="badge">⎈ v1.2.3 · Now available</div>
-  <h1>Switch Kubernetes<br/>contexts <span class="accent">instantly</span></h1>
-  <p>A blazing-fast interactive TUI for navigating Kubernetes contexts. Fuzzy search, aliases, short-name switching — available for <strong style="color:var(--cyan)">macOS</strong> and <strong style="color:var(--green)">Linux</strong>.</p>
+  <div class="badge">🤖 AI-Powered · v1.2.3</div>
+  <h1>Switch Kubernetes<br/>contexts with <span class="accent">AI</span></h1>
+  <p>Talk to your clusters in natural language. Switch contexts, manage groups, pins and aliases — just describe what you need. Powered by OpenAI, Claude, Gemini or AWS Bedrock.</p>
   <div class="hero-actions">
     <a href="#install" class="btn-primary">Install with Homebrew</a>
     <a href="https://github.com/YonierGomez/kswitch" target="_blank" class="btn-secondary">View on GitHub →</a>
   </div>
 
-  <!-- Terminal demo -->
+  <!-- Terminal demo — AI -->
   <div class="terminal">
     <div class="terminal-bar">
       <div class="dot dot-red"></div>
       <div class="dot dot-yellow"></div>
       <div class="dot dot-green"></div>
-      <div class="terminal-title">ksw — interactive context switcher</div>
+      <div class="terminal-title">ksw ai — natural language context switching</div>
     </div>
     <div class="terminal-body">
-      <div><span class="t-current">  current </span><span class="t-val">arn:aws:eks:us-east-1:111122223333:cluster/eks-payments-dev</span></div>
+      <div><span class="cmd">$ ksw ai "switch to payments dev"</span></div>
+      <div><span class="out">✔ Switched to arn:.../eks-payments-dev</span></div>
       <div>&nbsp;</div>
-      <div><span class="t-search">  ❯ payments█</span></div>
-      <div><span class="t-dim">  ──────────────────────────────────────────</span></div>
-      <div><span class="t-pointer"> ❯ </span><span class="t-cursor">arn:aws:eks:us-east-1:111122223333:cluster/eks-payments-dev</span><span class="t-dot"> ●</span></div>
-      <div><span class="t-normal">    arn:aws:eks:us-east-1:444455556666:cluster/eks-payments-qa</span></div>
-      <div><span class="t-normal">    arn:aws:eks:us-east-1:777788889999:cluster/eks-payments-pdn</span></div>
+      <div><span class="cmd">$ ksw ai "create a group called backend with payments and orders"</span></div>
+      <div><span class="out">✔ Group 'backend' created (4 contexts)</span></div>
       <div>&nbsp;</div>
-      <div><span class="t-counter">  3/42</span><span class="t-help">  ↑↓ navigate · enter select · ^f pinned · esc clear · ctrl+c quit</span></div>
+      <div><span class="cmd">$ ksw ai "now switch to the same but in qa"</span></div>
+      <div><span class="out">✔ Switched to arn:.../eks-payments-qa</span></div>
+      <div>&nbsp;</div>
+      <div><span class="cmd">$ ksw ai "list my pins and groups as a table"</span></div>
+      <div><span class="t-normal">🤖 AI builds a formatted table from your current state</span></div>
     </div>
   </div>
 </section>
@@ -580,11 +583,51 @@
   </div>
 </section>
 
+<!-- AI SECTION -->
+<section class="features" id="ai" style="padding-bottom:2rem;">
+  <p class="section-label">🤖 AI-Powered</p>
+  <h2 class="section-title">Your clusters, your language</h2>
+  <p class="section-sub">Stop memorizing ARNs and commands. Just tell ksw what you need in plain language.</p>
+
+  <div class="features-grid stagger" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+    <div class="feature-card" style="border-color: rgba(0,212,255,.3); background: linear-gradient(135deg, var(--bg2), rgba(0,212,255,.05));">
+      <div class="feature-icon">🧠</div>
+      <h3>Natural Language</h3>
+      <p>Switch contexts, create groups, pin favorites, list aliases — describe it in your own words and the AI executes it. No syntax to memorize.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(0,212,255,.3); background: linear-gradient(135deg, var(--bg2), rgba(0,212,255,.05));">
+      <div class="feature-icon">💬</div>
+      <h3>Conversational Memory</h3>
+      <p>The AI remembers your last 10 interactions. Say "go back to the previous one" or "same but in qa" and it understands the context.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(0,212,255,.3); background: linear-gradient(135deg, var(--bg2), rgba(0,212,255,.05));">
+      <div class="feature-icon">⚡</div>
+      <h3>Multi-Action</h3>
+      <p>Execute multiple tasks in a single prompt. "List my pins and groups" runs both commands and returns combined results.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(0,212,255,.3); background: linear-gradient(135deg, var(--bg2), rgba(0,212,255,.05));">
+      <div class="feature-icon">🔌</div>
+      <h3>Multi-Provider</h3>
+      <p>Works with OpenAI, Claude (Anthropic), Gemini (Google) and AWS Bedrock. Use the model you already have access to.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(0,212,255,.3); background: linear-gradient(135deg, var(--bg2), rgba(0,212,255,.05));">
+      <div class="feature-icon">📊</div>
+      <h3>Smart Formatting</h3>
+      <p>Ask for tables, summaries, or any custom format. The AI builds the response from your actual state — not canned output.</p>
+    </div>
+    <div class="feature-card" style="border-color: rgba(0,212,255,.3); background: linear-gradient(135deg, var(--bg2), rgba(0,212,255,.05));">
+      <div class="feature-icon">🔒</div>
+      <h3>Full State Awareness</h3>
+      <p>The AI knows your current context, all groups, pins, aliases and history. It gives personalized, accurate answers every time.</p>
+    </div>
+  </div>
+</section>
+
 <!-- FEATURES -->
-<section class="features" id="features">
-  <p class="section-label">Why ksw?</p>
-  <h2 class="section-title">Everything you need</h2>
-  <p class="section-sub">Available for macOS and Linux (amd64 & arm64). Designed for engineers who manage dozens of Kubernetes clusters daily.</p>
+<section class="features" id="features" style="padding-top:2rem;">
+  <p class="section-label">Core Features</p>
+  <h2 class="section-title">Everything else you need</h2>
+  <p class="section-sub">Beyond AI — a full-featured TUI for macOS and Linux. Designed for engineers who manage dozens of Kubernetes clusters daily.</p>
 
   <div class="features-grid stagger">
     <div class="feature-card">
@@ -648,6 +691,19 @@
     <p class="section-sub">From interactive navigation to one-liners, ksw fits every workflow.</p>
 
     <div class="usage-grid stagger">
+      <div class="usage-card" style="border-color: rgba(0,212,255,.3); grid-column: 1 / -1;">
+        <div class="usage-card-header" style="background: linear-gradient(90deg, var(--bg3), rgba(0,212,255,.08));">🤖 AI — natural language</div>
+        <div class="usage-card-body">
+          <div><span class="cmd">$ ksw ai "switch to payments dev"</span></div>
+          <div><span class="out">✔ Switched to arn:.../eks-payments-dev</span></div>
+          <div><span class="cmd">$ ksw ai "pin nequi dev and create a group called fintech with nequi and sufi"</span></div>
+          <div><span class="out">✔ Pinned ★ arn:.../eks-nequi-dev</span></div>
+          <div><span class="out">✔ Group 'fintech' created (4 contexts)</span></div>
+          <div><span class="cmd">$ ksw ai "go back to the previous one"</span></div>
+          <div><span class="out">✔ Switched to arn:.../eks-sufi-qa</span></div>
+          <div><span class="cmd">$ ksw ai config</span> <span class="cmt"># Setup wizard: provider, model, credentials</span></div>
+        </div>
+      </div>
       <div class="usage-card">
         <div class="usage-card-header">Interactive mode</div>
         <div class="usage-card-body">
@@ -738,7 +794,7 @@
 <!-- FOOTER -->
 <footer>
   <div class="footer-logo">⎈ <span>ksw</span></div>
-  <p>Interactive Kubernetes context switcher · v1.2.3</p>
+  <p>AI-Powered Kubernetes context switcher · v1.2.3</p>
   <ul class="footer-links">
     <li><a href="https://github.com/YonierGomez/kswitch" target="_blank">GitHub</a></li>
     <li><a href="https://github.com/YonierGomez/kswitch/releases" target="_blank">Releases</a></li>
