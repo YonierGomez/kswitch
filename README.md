@@ -8,9 +8,17 @@ Switch contexts with natural language, manage groups, pins and aliases — all b
 
 > Available for **macOS** and **Linux** (amd64 & arm64).
 
-## 🤖 AI — Natural Language Context Management
+### Interactive TUI
+![TUI demo](demo/tui.gif)
+
+### AI — Natural Language
+![AI demo](demo/ai.gif)
+
+ — Natural Language Context Management
 
 Talk to your clusters. `ksw ai` understands what you mean and executes it.
+
+![AI demo](demo/ai.gif)
 
 ```bash
 # Switch contexts with natural language
@@ -214,6 +222,8 @@ ksw payments
 
 Pin your most-used contexts so they always appear at the top of the list:
 
+![Pins demo](demo/pins.gif)
+
 ```bash
 ksw pin eks-payments-dev     # Pin by short name
 ksw pin ls                   # List pinned contexts
@@ -225,6 +235,8 @@ In the TUI, pinned contexts appear in **yellow** with a `★` marker. Press `Ctr
 ### Previous context
 
 Switch back to the last context instantly — like `cd -` in bash:
+
+![Previous context demo](demo/previous.gif)
 
 ```bash
 ksw -
@@ -239,6 +251,8 @@ ksw -              # back to dev
 ### History
 
 Show the last 10 contexts you visited:
+
+![History demo](demo/history.gif)
 
 ```bash
 ksw history
@@ -263,6 +277,8 @@ ksw history 5
 ### Groups
 
 Organize contexts into named groups and open the TUI filtered to only those contexts:
+
+![Groups demo](demo/groups.gif)
 
 ```bash
 # Create a group with multiple contexts (short names or glob patterns)
@@ -303,6 +319,8 @@ ksw group rm payments
 ```
 
 ### Aliases
+
+![Aliases demo](demo/aliases.gif)
 
 ```bash
 ksw alias prod arn:aws:eks:us-east-1:111122223333:cluster/eks-payments-dev
