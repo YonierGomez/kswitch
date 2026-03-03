@@ -23,7 +23,31 @@ echo "🚀 Iniciando release $TAG..."
 git checkout main
 git pull origin main
 
-# 2. Crear y pushear el tag
+# 2. Bump version constant en main.go y hacer PR antes del tag
+echo "📝 Actualizando version constant en main.go..."
+VERSION_BRANCH="chore/bump-version-$TAG"
+git checkout -b "$VERSION_BRANCH"
+sed -i '' "s|const version = \"[0-9]*\.[0-9]*\.[0-9]*\"|const version = \"$VERSION\"|g" main.go
+git add main.go
+git commit -m "chore: bump version to $TAG"
+git push origin "$VERSION_BRANCH"
+
+gh pr create \
+  --repo YonierGomez/ksw \
+  --base main \
+  --head "$VERSION_BRANCH" \
+  --title "chore: bump version to $TAG" \
+  --body "$DESCRIPTION"
+
+gh pr merge \
+  --repo YonierGomez/ksw \
+  --squash \
+  "$VERSION_BRANCH"
+
+git checkout main
+git pull origin main
+
+# 3. Crear y pushear el tag
 echo "🏷️  Creando tag $TAG..."
 git tag "$TAG"
 git push origin "$TAG"
