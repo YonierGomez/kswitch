@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const version = "1.4.0"
+const version = "1.4.1"
 
 // ── Styles ─────────────────────────────────────────────
 var (
