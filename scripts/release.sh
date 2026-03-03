@@ -17,70 +17,82 @@ fi
 
 TAG="v$VERSION"
 
-echo "🚀 Iniciando release $TAG..."
+echo "🔍 Validando entorno antes de release $TAG..."
 
 # ── VALIDACIONES PREVIAS ───────────────────────────────
 
-# 1. Estar en main actualizado
-git checkout main
-git pull origin main
-
-# 2. Verificar que el tag no existe ya
-if git tag | grep -q "^${TAG}$"; then
-  echo "❌ El tag $TAG ya existe. Aborta."
+# 1. gh CLI disponible y autenticado
+if ! gh auth status &>/dev/null; then
+  echo "❌ gh CLI no autenticado. Ejecuta: gh auth login"
   exit 1
 fi
+echo "✔ gh CLI autenticado"
 
-# 3. Verificar que const version en main.go coincide con VERSION
+# 2. Estar en main actualizado
+git checkout main
+git pull origin main
+echo "✔ main actualizado"
+
+# 3. Working tree limpio
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "❌ Hay cambios sin commitear en el working tree:"
+  git status --short
+  exit 1
+fi
+echo "✔ Working tree limpio"
+
+# 4. El tag no existe ya
+if git tag | grep -q "^${TAG}$"; then
+  echo "❌ El tag $TAG ya existe localmente. Bórralo primero:"
+  echo "   git tag -d $TAG && git push origin :refs/tags/$TAG"
+  exit 1
+fi
+if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+  echo "❌ El tag $TAG ya existe en origin. Bórralo primero:"
+  echo "   git push origin :refs/tags/$TAG"
+  exit 1
+fi
+echo "✔ Tag $TAG no existe"
+
+# 5. const version en main.go coincide con VERSION
 CURRENT_VERSION=$(grep 'const version' main.go | grep -o '"[^"]*"' | tr -d '"')
 if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
   echo "❌ const version en main.go es '$CURRENT_VERSION', esperaba '$VERSION'"
-  echo "   Actualiza main.go primero o deja que el script lo haga automáticamente."
-  echo ""
-  read -p "   ¿Actualizar main.go a $VERSION automáticamente? [s/N]: " CONFIRM
-  if [[ "$CONFIRM" != "s" && "$CONFIRM" != "S" ]]; then
-    echo "Abortado."
-    exit 1
-  fi
-
-  # Bump version en main.go via PR
-  VERSION_BRANCH="chore/bump-version-$TAG"
-  git checkout -b "$VERSION_BRANCH"
-  sed -i '' "s|const version = \"[0-9]*\.[0-9]*\.[0-9]*\"|const version = \"$VERSION\"|g" main.go
-  git add main.go
-  git commit -m "chore: bump version constant to $TAG"
-  git push origin "$VERSION_BRANCH"
-
-  gh pr create \
-    --repo YonierGomez/ksw \
-    --base main \
-    --head "$VERSION_BRANCH" \
-    --title "chore: bump version constant to $TAG" \
-    --body "$DESCRIPTION"
-
-  gh pr merge --repo YonierGomez/ksw --squash "$VERSION_BRANCH"
-
-  git checkout main
-  git pull origin main
-fi
-
-# 4. Verificar una vez más que todo coincide antes de continuar
-CURRENT_VERSION=$(grep 'const version' main.go | grep -o '"[^"]*"' | tr -d '"')
-if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
-  echo "❌ const version sigue siendo '$CURRENT_VERSION'. Algo falló. Abortando."
+  echo "   Actualiza main.go primero con: ./scripts/release.sh $VERSION \"...\""
+  echo "   O edita main.go manualmente y haz PR antes de correr este script."
   exit 1
 fi
+echo "✔ const version=$CURRENT_VERSION coincide con $TAG"
 
-echo "✔ Validaciones OK — const version=$CURRENT_VERSION, tag=$TAG no existe"
+# 6. Archivos clave existen
+for f in main.go go.mod Formula/ksw.rb scripts/release.sh; do
+  if [[ ! -f "$f" ]]; then
+    echo "❌ Archivo requerido no encontrado: $f"
+    exit 1
+  fi
+done
+echo "✔ Archivos clave presentes"
+
+# 7. Homebrew tap dir existe
+if [[ ! -d "$HOMEBREW_TAP_DIR" ]]; then
+  echo "❌ Homebrew tap no encontrado en $HOMEBREW_TAP_DIR"
+  echo "   Ejecuta: brew tap yoniergomez/ksw"
+  exit 1
+fi
+echo "✔ Homebrew tap presente"
+
+echo ""
+echo "✅ Todas las validaciones pasaron. Iniciando release $TAG..."
+echo ""
 
 # ── RELEASE ────────────────────────────────────────────
 
-# 5. Crear y pushear el tag
+# 8. Crear y pushear el tag
 echo "🏷️  Creando tag $TAG..."
 git tag "$TAG"
 git push origin "$TAG"
 
-# 6. Esperar tarball
+# 9. Esperar tarball
 echo "⏳ Esperando tarball en GitHub..."
 TARBALL_URL="https://github.com/YonierGomez/ksw/archive/refs/tags/${TAG}.tar.gz"
 for i in {1..20}; do
@@ -89,27 +101,32 @@ for i in {1..20}; do
     echo "✔ Tarball disponible"
     break
   fi
+  if [[ $i -eq 20 ]]; then
+    echo "❌ Tarball no disponible después de 100s. Abortando."
+    exit 1
+  fi
   echo "  Intento $i/20..."
   sleep 5
 done
 
-# 7. Calcular sha256
+# 10. Calcular sha256
 echo "🔐 Calculando sha256..."
 SHA256=$(curl -sL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')
 echo "   sha256: $SHA256"
 
-# 8. Verificar que el tarball contiene la versión correcta
+# 11. Verificar que el tarball contiene la versión correcta
 TARBALL_VERSION=$(curl -sL "$TARBALL_URL" | tar xz -O --include="*/main.go" 2>/dev/null | grep 'const version' | grep -o '"[^"]*"' | tr -d '"')
 if [[ "$TARBALL_VERSION" != "$VERSION" ]]; then
-  echo "❌ El tarball contiene const version='$TARBALL_VERSION', esperaba '$VERSION'. Abortando."
-  echo "   Borra el tag con: git tag -d $TAG && git push origin :refs/tags/$TAG"
+  echo "❌ El tarball contiene const version='$TARBALL_VERSION', esperaba '$VERSION'"
+  echo "   Borra el tag y vuelve a intentar:"
+  echo "   git tag -d $TAG && git push origin :refs/tags/$TAG"
   exit 1
 fi
 echo "✔ Tarball verificado — const version=$TARBALL_VERSION"
 
 BRANCH="chore/bump-$TAG"
 
-# 9. Actualizar Formula/ksw.rb en repo principal
+# 12. Actualizar Formula/ksw.rb en repo principal
 echo "📝 Actualizando Formula/ksw.rb en ksw..."
 git checkout -b "$BRANCH"
 sed -i '' "s|refs/tags/v[0-9]*\.[0-9]*\.[0-9]*.tar.gz|refs/tags/${TAG}.tar.gz|g" Formula/ksw.rb
@@ -127,7 +144,24 @@ gh pr create \
 
 gh pr merge --repo YonierGomez/ksw --squash "$BRANCH"
 
-# 10. Actualizar formula en homebrew-ksw
+# 13. Esperar a que el PR quede mergeado en main
+echo "⏳ Esperando merge en main..."
+for i in {1..15}; do
+  git checkout main && git pull origin main
+  FORMULA_VERSION=$(grep 'refs/tags' Formula/ksw.rb | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*')
+  if [[ "$FORMULA_VERSION" == "$TAG" ]]; then
+    echo "✔ Formula en main actualizada a $TAG"
+    break
+  fi
+  if [[ $i -eq 15 ]]; then
+    echo "❌ Formula en main no se actualizó después de esperar. Revisa el PR manualmente."
+    exit 1
+  fi
+  echo "  Esperando... ($i/15)"
+  sleep 5
+done
+
+# 14. Actualizar formula en homebrew-ksw
 echo "🍺 Actualizando homebrew-ksw..."
 git -C "$HOMEBREW_TAP_DIR" checkout main
 git -C "$HOMEBREW_TAP_DIR" pull origin main
@@ -147,13 +181,37 @@ gh pr create \
 
 gh pr merge --repo YonierGomez/homebrew-ksw --squash "$BRANCH"
 
-# 11. Actualizar brew local
+# 15. Esperar merge en homebrew-ksw
+echo "⏳ Esperando merge en homebrew-ksw..."
+for i in {1..15}; do
+  git -C "$HOMEBREW_TAP_DIR" checkout main && git -C "$HOMEBREW_TAP_DIR" pull origin main
+  TAP_VERSION=$(grep 'refs/tags' "$HOMEBREW_TAP_DIR/Formula/ksw.rb" | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*')
+  if [[ "$TAP_VERSION" == "$TAG" ]]; then
+    echo "✔ homebrew-ksw actualizado a $TAG"
+    break
+  fi
+  if [[ $i -eq 15 ]]; then
+    echo "❌ homebrew-ksw no se actualizó. Revisa el PR manualmente."
+    exit 1
+  fi
+  echo "  Esperando... ($i/15)"
+  sleep 5
+done
+
+# 16. brew upgrade y verificación final
 echo "🔄 Actualizando brew..."
 brew update && brew upgrade ksw
 
+INSTALLED_VERSION=$(ksw -v | grep -o '[0-9]*\.[0-9]*\.[0-9]*')
+if [[ "$INSTALLED_VERSION" != "$VERSION" ]]; then
+  echo "❌ ksw -v reporta '$INSTALLED_VERSION', esperaba '$VERSION'"
+  exit 1
+fi
+
 echo ""
-echo "✅ Release $TAG completado"
+echo "✅ Release $TAG completado y verificado"
 echo "   - const version=$VERSION ✔"
-echo "   - Tag $TAG pusheado ✔"
-echo "   - Formula actualizada en ksw y homebrew-ksw ✔"
-echo "   - brew upgrade ksw ✔"
+echo "   - Tag $TAG ✔"
+echo "   - Formula en ksw ✔"
+echo "   - Formula en homebrew-ksw ✔"
+echo "   - ksw -v = $INSTALLED_VERSION ✔"
